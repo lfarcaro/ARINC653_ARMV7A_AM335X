@@ -1,0 +1,424 @@
+// ARINC653 includes
+#include "arinc653_core.h"
+
+// Create blackboard method
+void CREATE_BLACKBOARD(BLACKBOARD_NAME_TYPE BLACKBOARD_NAME, MESSAGE_SIZE_TYPE MAX_MESSAGE_SIZE, BLACKBOARD_ID_TYPE *BLACKBOARD_ID, RETURN_CODE_TYPE *RETURN_CODE) {
+	BLACKBOARD_ID_TYPE BLACKBOARD_IDENTIFIER;
+	BLACKBOARD_INFORMATION_TYPE *BLACKBOARD_INFORMATION;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies operating mode
+	if (_CURRENT_PARTITION_INFORMATION->OPERATING_MODE == NORMAL) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets free identifier
+	BLACKBOARD_IDENTIFIER = _CURRENT_PARTITION_INFORMATION->BLACKBOARD_COUNT;
+
+	// Verifies blackboard count
+	if (BLACKBOARD_IDENTIFIER >= _CURRENT_PARTITION_INFORMATION->PARTITION_CONFIGURATION->MAXIMUM_BLACKBOARD_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets blackboard identifier
+	GET_BLACKBOARD_ID(BLACKBOARD_NAME, &BLACKBOARD_IDENTIFIER, RETURN_CODE);
+
+	// Verifies blackboard identifier
+	if (*RETURN_CODE == NO_ERROR) {
+
+		// Sets return code
+		*RETURN_CODE = NO_ACTION;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies maximum message size
+	if ((MAX_MESSAGE_SIZE < PORT_INTRAPARTITIONCOMMUNICATION_BLACKBOARD_MINIMUMMESSAGESIZE) || (MAX_MESSAGE_SIZE > PORT_INTRAPARTITIONCOMMUNICATION_BLACKBOARD_MAXIMUMMESSAGESIZE)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets blackboard information
+	BLACKBOARD_INFORMATION = &_CURRENT_PARTITION_INFORMATION->BLACKBOARD_INFORMATION[BLACKBOARD_IDENTIFIER];
+
+	// Allocates memory for message - If pointer is not null, keeps it unchanged
+	HEAP_ALLOCATE(&_CURRENT_PARTITION_INFORMATION->REC_HEAP, (heapPOINTER *) &BLACKBOARD_INFORMATION->MESSAGE, MAX_MESSAGE_SIZE, false);
+
+	// Verifies message memory
+	if (BLACKBOARD_INFORMATION->MESSAGE == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Allocates memory for name - If pointer is not null, keeps it unchanged
+	HEAP_ALLOCATE(&_CURRENT_PARTITION_INFORMATION->REC_HEAP, (heapPOINTER *) &BLACKBOARD_INFORMATION->NAME, MAX_NAME_LENGTH, false);
+
+	// Verifies name memory
+	if (BLACKBOARD_INFORMATION->NAME == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Copies name
+	if (!COMMON_COPYSTRING(BLACKBOARD_NAME, BLACKBOARD_INFORMATION->NAME, MAX_NAME_LENGTH)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Sets up blackboard
+	BLACKBOARD_INFORMATION->IDENTIFIER = BLACKBOARD_IDENTIFIER;
+	// BLACKBOARD_INFORMATION->NAME = BLACKBOARD_NAME; // Already copied
+	BLACKBOARD_INFORMATION->EMPTY_INDICATOR = EMPTY;
+	BLACKBOARD_INFORMATION->MAX_MESSAGE_SIZE = MAX_MESSAGE_SIZE;
+
+	// Clears blackboard priority queue
+	PRIORITYQUEUE_CLEAR(&BLACKBOARD_INFORMATION->REC_BLACKBOARD, true, false);
+
+	// Counts created blackboard
+	_CURRENT_PARTITION_INFORMATION->BLACKBOARD_COUNT++;
+
+	// Sets blackboard identifier
+	*BLACKBOARD_ID = BLACKBOARD_IDENTIFIER;
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Display blackboard method
+void DISPLAY_BLACKBOARD(BLACKBOARD_ID_TYPE BLACKBOARD_ID, MESSAGE_ADDR_TYPE MESSAGE_ADDR, MESSAGE_SIZE_TYPE LENGTH, RETURN_CODE_TYPE *RETURN_CODE) {
+	BLACKBOARD_INFORMATION_TYPE *BLACKBOARD_INFORMATION;
+	INDEX_TYPE CHARACTER_INDEX;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies blackboard identifier
+	if (BLACKBOARD_ID >= _CURRENT_PARTITION_INFORMATION->BLACKBOARD_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets blackboard information
+	BLACKBOARD_INFORMATION = &_CURRENT_PARTITION_INFORMATION->BLACKBOARD_INFORMATION[BLACKBOARD_ID];
+
+	// Verifies message length
+	if (LENGTH > BLACKBOARD_INFORMATION->MAX_MESSAGE_SIZE) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Sets blackboard empty indicator
+	BLACKBOARD_INFORMATION->EMPTY_INDICATOR = OCCUPIED;
+
+	// Overwrites blackboard's message with the given message
+	for (CHARACTER_INDEX = 0; CHARACTER_INDEX < LENGTH; CHARACTER_INDEX++) {
+		BLACKBOARD_INFORMATION->MESSAGE[CHARACTER_INDEX] = MESSAGE_ADDR[CHARACTER_INDEX];
+	}
+	BLACKBOARD_INFORMATION->LENGTH = LENGTH;
+
+	// Verifies priority queue
+	if (!PRIORITYQUEUE_ISEMPTY(&BLACKBOARD_INFORMATION->REC_BLACKBOARD)) {
+
+		// Process release loop
+		while (!PRIORITYQUEUE_ISEMPTY(&BLACKBOARD_INFORMATION->REC_BLACKBOARD)) {
+
+			// Signals resource
+			SIGNAL_RESOURCE(_CURRENT_PARTITION_INFORMATION->IDENTIFIER, &BLACKBOARD_INFORMATION->REC_BLACKBOARD, false, RETURN_CODE);
+		}
+
+		// Verifies lock level
+		if (_CURRENT_PARTITION_INFORMATION->LOCK_LEVEL == 0) {
+
+			// Yields
+			PORT_YIELD();
+		}
+	}
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Read blackboard method
+void READ_BLACKBOARD(BLACKBOARD_ID_TYPE BLACKBOARD_ID, SYSTEM_TIME_TYPE TIME_OUT, MESSAGE_ADDR_TYPE MESSAGE_ADDR, MESSAGE_SIZE_TYPE *LENGTH, RETURN_CODE_TYPE *RETURN_CODE) {
+	BLACKBOARD_INFORMATION_TYPE *BLACKBOARD_INFORMATION;
+	INDEX_TYPE CHARACTER_INDEX;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies current process information
+	if (_CURRENT_PROCESS_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies blackboard identifier
+	if (BLACKBOARD_ID >= _CURRENT_PARTITION_INFORMATION->BLACKBOARD_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets blackboard information
+	BLACKBOARD_INFORMATION = &_CURRENT_PARTITION_INFORMATION->BLACKBOARD_INFORMATION[BLACKBOARD_ID];
+
+	// Verifies blackboard empty indicator
+	if (BLACKBOARD_INFORMATION->EMPTY_INDICATOR == OCCUPIED) {
+
+		// Copies blackboard's message
+		for (CHARACTER_INDEX = 0; CHARACTER_INDEX < BLACKBOARD_INFORMATION->LENGTH; CHARACTER_INDEX++) {
+			MESSAGE_ADDR[CHARACTER_INDEX] = BLACKBOARD_INFORMATION->MESSAGE[CHARACTER_INDEX];
+		}
+
+		// Sets length
+		*LENGTH = BLACKBOARD_INFORMATION->LENGTH;
+
+		// Sets return code
+		*RETURN_CODE = NO_ERROR;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Waits for resource
+	WAIT_RESOURCE(_CURRENT_PARTITION_INFORMATION->IDENTIFIER, _CURRENT_PROCESS_INFORMATION->IDENTIFIER, &BLACKBOARD_INFORMATION->REC_BLACKBOARD, TIME_OUT, RETURN_CODE);
+
+	// If blackboard is displayed before timeout (if any)
+	if (*RETURN_CODE == NO_ERROR) {
+
+		// Copies blackboard's message
+		for (CHARACTER_INDEX = 0; CHARACTER_INDEX < BLACKBOARD_INFORMATION->LENGTH; CHARACTER_INDEX++) {
+			MESSAGE_ADDR[CHARACTER_INDEX] = BLACKBOARD_INFORMATION->MESSAGE[CHARACTER_INDEX];
+		}
+
+		// Sets length
+		*LENGTH = BLACKBOARD_INFORMATION->LENGTH;
+	}
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Clear blackboard method
+void CLEAR_BLACKBOARD(BLACKBOARD_ID_TYPE BLACKBOARD_ID, RETURN_CODE_TYPE *RETURN_CODE) {
+	BLACKBOARD_INFORMATION_TYPE *BLACKBOARD_INFORMATION;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies blackboard identifier
+	if (BLACKBOARD_ID >= _CURRENT_PARTITION_INFORMATION->BLACKBOARD_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets blackboard information
+	BLACKBOARD_INFORMATION = &_CURRENT_PARTITION_INFORMATION->BLACKBOARD_INFORMATION[BLACKBOARD_ID];
+
+	// Sets blackboard empty indicator
+	BLACKBOARD_INFORMATION->EMPTY_INDICATOR = EMPTY;
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Blackboard identifier getter
+void GET_BLACKBOARD_ID(BLACKBOARD_NAME_TYPE BLACKBOARD_NAME, BLACKBOARD_ID_TYPE *BLACKBOARD_ID, RETURN_CODE_TYPE *RETURN_CODE) {
+	BLACKBOARD_ID_TYPE BLACKBOARD_IDENTIFIER;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Iterates blackboards
+	for (BLACKBOARD_IDENTIFIER = 0; BLACKBOARD_IDENTIFIER < _CURRENT_PARTITION_INFORMATION->BLACKBOARD_COUNT; BLACKBOARD_IDENTIFIER++) {
+
+		// Compares names
+		if (COMMON_COMPARESTRINGS(BLACKBOARD_NAME, _CURRENT_PARTITION_INFORMATION->BLACKBOARD_INFORMATION[BLACKBOARD_IDENTIFIER].NAME, MAX_NAME_LENGTH)) {
+
+			// Sets blackboard identifier
+			*BLACKBOARD_ID = BLACKBOARD_IDENTIFIER;
+
+			// Sets return code
+			*RETURN_CODE = NO_ERROR;
+
+			// Exits core
+			EXIT_CORE();
+			return;
+		}
+	}
+
+	// Sets return code
+	*RETURN_CODE = INVALID_CONFIG;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Blackboard status getter
+void GET_BLACKBOARD_STATUS(BLACKBOARD_ID_TYPE BLACKBOARD_ID, BLACKBOARD_STATUS_TYPE *BLACKBOARD_STATUS, RETURN_CODE_TYPE *RETURN_CODE) {
+	BLACKBOARD_INFORMATION_TYPE *BLACKBOARD_INFORMATION;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies blackboard identifier
+	if (BLACKBOARD_ID >= _CURRENT_PARTITION_INFORMATION->BLACKBOARD_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets blackboard information
+	BLACKBOARD_INFORMATION = &_CURRENT_PARTITION_INFORMATION->BLACKBOARD_INFORMATION[BLACKBOARD_ID];
+
+	// Copies status
+	BLACKBOARD_STATUS->EMPTY_INDICATOR = BLACKBOARD_INFORMATION->EMPTY_INDICATOR;
+	BLACKBOARD_STATUS->MAX_MESSAGE_SIZE = BLACKBOARD_INFORMATION->MAX_MESSAGE_SIZE;
+	BLACKBOARD_STATUS->WAITING_PROCESSES = PRIORITYQUEUE_GETCOUNT(&BLACKBOARD_INFORMATION->REC_BLACKBOARD);
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}

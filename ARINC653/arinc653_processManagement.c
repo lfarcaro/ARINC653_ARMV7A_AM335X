@@ -1,0 +1,1579 @@
+// ARINC653 includes
+#include "arinc653_core.h"
+
+// Wait resource method
+void WAIT_RESOURCE(PARTITION_ID_TYPE PARTITION_ID, PROCESS_ID_TYPE PROCESS_ID, priorityqueueRECORD *REC_RESOURCE, SYSTEM_TIME_TYPE TIME_OUT, RETURN_CODE_TYPE *RETURN_CODE) {
+	PARTITION_INFORMATION_TYPE *PARTITION_INFORMATION;
+	PROCESS_INFORMATION_TYPE *PROCESS_INFORMATION;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies partition identifier
+	if (PARTITION_ID >= MODULE_INFORMATION.PARTITION_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets partition information
+	PARTITION_INFORMATION = &MODULE_INFORMATION.PARTITION_INFORMATION[PARTITION_ID];
+
+	// Verifies process identifier
+	if (PROCESS_ID >= PARTITION_INFORMATION->PROCESS_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets process information
+	PROCESS_INFORMATION = &PARTITION_INFORMATION->PROCESS_INFORMATION[PROCESS_ID];
+
+	// Verifies timeout
+	if ((TIME_OUT < 0) && (TIME_OUT != INFINITE_TIME_VALUE)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies timeout
+	if (TIME_OUT == 0) {
+
+		// Sets return code
+		*RETURN_CODE = NOT_AVAILABLE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies lock level and error handler state
+	if ((PARTITION_INFORMATION->LOCK_LEVEL > 0) || (PARTITION_INFORMATION->ERRORHANDLER_INFORMATION.RUNNING)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Removes priority queue entries
+	PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSREADY);
+
+	// Sets process state
+	PROCESS_INFORMATION->PROCESS_STATE = WAITING;
+
+	// Fills process waiting resource priority queue entry
+	PROCESS_INFORMATION->ENT_PROCESSWAITING_RESOURCE.PRI_PRIORITY = (priorityqueuePRIORITY) PROCESS_INFORMATION->CURRENT_PRIORITY;
+	PROCESS_INFORMATION->ENT_PROCESSWAITING_RESOURCE.VAL_VALUE = (priorityqueueVALUE) PROCESS_INFORMATION->IDENTIFIER;
+
+	// Enqueues process waiting resource priority queue entry
+	PRIORITYQUEUE_ENQUEUE(REC_RESOURCE, &PROCESS_INFORMATION->ENT_PROCESSWAITING_RESOURCE);
+
+	// Verifies timeout
+	if (TIME_OUT != INFINITE_TIME_VALUE) {
+
+		// Sets wait and wake time
+		PROCESS_INFORMATION->WAIT_TIME = CLOCK_GETSYSTEMTIME();
+		PROCESS_INFORMATION->WAKE_TIME = INFINITE_TIME_VALUE;
+
+		// Fills process waiting timeout priority queue entry
+		PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT.PRI_PRIORITY = (priorityqueuePRIORITY) (CLOCK_GETSYSTEMTIME() + TIME_OUT);
+		PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT.VAL_VALUE = (priorityqueueVALUE) PROCESS_INFORMATION->IDENTIFIER;
+
+		// Enqueues process waiting timeout priority queue entry
+		PRIORITYQUEUE_ENQUEUE(&PARTITION_INFORMATION->REC_PROCESSWAITING_TIMEOUT, &PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT);
+
+		// Yields
+		PORT_YIELD();
+
+		// Removes priority queue entries
+		PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT);
+		PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSWAITING_RESOURCE);
+
+		// Verifies time expiration
+		if (PROCESS_INFORMATION->WAKE_TIME != INFINITE_TIME_VALUE) {
+
+			// Sets return code
+			*RETURN_CODE = TIMED_OUT;
+		} else {
+
+			// Sets return code
+			*RETURN_CODE = NO_ERROR;
+		}
+	} else {
+
+		// Yields
+		PORT_YIELD();
+
+		// Sets return code
+		*RETURN_CODE = NO_ERROR;
+	}
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Signal resource method
+void SIGNAL_RESOURCE(PARTITION_ID_TYPE PARTITION_ID, priorityqueueRECORD *REC_RESOURCE, BOOLEAN_TYPE RESCHEDULE, RETURN_CODE_TYPE *RETURN_CODE) {
+	PARTITION_INFORMATION_TYPE *PARTITION_INFORMATION;
+	PROCESS_INFORMATION_TYPE *PROCESS_INFORMATION;
+	priorityqueueENTRY *ENT_PROCESS;
+	PROCESS_ID_TYPE PROCESS_IDENTIFIER;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies partition identifier
+	if (PARTITION_ID >= MODULE_INFORMATION.PARTITION_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets partition information
+	PARTITION_INFORMATION = &MODULE_INFORMATION.PARTITION_INFORMATION[PARTITION_ID];
+
+	// Verifies process waiting resource priority queue
+	if (PRIORITYQUEUE_ISEMPTY(REC_RESOURCE)) {
+
+		// Sets return code
+		*RETURN_CODE = NO_ACTION;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets process waiting resource priority queue head
+	ENT_PROCESS = REC_RESOURCE->ENT_HEAD;
+
+	// Gets process identifier
+	PROCESS_IDENTIFIER = (PROCESS_ID_TYPE) ENT_PROCESS->VAL_VALUE;
+
+	// Verifies process identifier
+	if (PROCESS_IDENTIFIER >= PARTITION_INFORMATION->PROCESS_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets process information
+	PROCESS_INFORMATION = &PARTITION_INFORMATION->PROCESS_INFORMATION[PROCESS_IDENTIFIER];
+
+	// Removes priority queue entries
+	PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT);
+	PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSWAITING_RESOURCE);
+
+	// Verifies suspended flag
+	if (!PROCESS_INFORMATION->SUSPENDED) {
+
+		// Sets process state
+		PROCESS_INFORMATION->PROCESS_STATE = READY;
+
+		// Fills process ready priority queue entry
+		PROCESS_INFORMATION->ENT_PROCESSREADY.PRI_PRIORITY = (priorityqueuePRIORITY) PROCESS_INFORMATION->CURRENT_PRIORITY;
+		PROCESS_INFORMATION->ENT_PROCESSREADY.VAL_VALUE = (priorityqueueVALUE) PROCESS_INFORMATION->IDENTIFIER;
+
+		// Enqueues process ready priority queue entry
+		PRIORITYQUEUE_ENQUEUE(&PARTITION_INFORMATION->REC_PROCESSREADY, &PROCESS_INFORMATION->ENT_PROCESSREADY);
+
+		// Verifies reschedule flag and lock level
+		if ((RESCHEDULE) && (PARTITION_INFORMATION->LOCK_LEVEL == 0)) {
+
+			// Yields
+			PORT_YIELD();
+		}
+	}
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Process identifier getter
+void GET_PROCESS_ID(PROCESS_NAME_TYPE PROCESS_NAME, PROCESS_ID_TYPE *PROCESS_ID, RETURN_CODE_TYPE *RETURN_CODE) {
+	PROCESS_ID_TYPE PROCESS_IDENTIFIER;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Iterates processes
+	for (PROCESS_IDENTIFIER = 0; PROCESS_IDENTIFIER < _CURRENT_PARTITION_INFORMATION->PROCESS_COUNT; PROCESS_IDENTIFIER++) {
+
+		// Compares names
+		if (COMMON_COMPARESTRINGS(PROCESS_NAME, _CURRENT_PARTITION_INFORMATION->PROCESS_INFORMATION[PROCESS_IDENTIFIER].PROCESS_ATTRIBUTE->NAME, MAX_NAME_LENGTH)) {
+
+			// Sets process identifier
+			*PROCESS_ID = PROCESS_IDENTIFIER;
+
+			// Sets return code
+			*RETURN_CODE = NO_ERROR;
+
+			// Exits core
+			EXIT_CORE();
+			return;
+		}
+	}
+
+	// Sets return code
+	*RETURN_CODE = INVALID_CONFIG;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Process status getter
+void GET_PROCESS_STATUS(PROCESS_ID_TYPE PROCESS_ID, PROCESS_STATUS_TYPE *PROCESS_STATUS, RETURN_CODE_TYPE *RETURN_CODE) {
+	PROCESS_INFORMATION_TYPE *PROCESS_INFORMATION;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies process identifier
+	if (PROCESS_ID >= _CURRENT_PARTITION_INFORMATION->PROCESS_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets process information
+	PROCESS_INFORMATION = &_CURRENT_PARTITION_INFORMATION->PROCESS_INFORMATION[PROCESS_ID];
+
+	// Copies status
+	PROCESS_STATUS->ATTRIBUTES.NAME = PROCESS_INFORMATION->PROCESS_ATTRIBUTE->NAME;
+	PROCESS_STATUS->ATTRIBUTES.ENTRY_POINT = PROCESS_INFORMATION->PROCESS_ATTRIBUTE->ENTRY_POINT;
+	PROCESS_STATUS->ATTRIBUTES.STACK_SIZE = PROCESS_INFORMATION->PROCESS_ATTRIBUTE->STACK_SIZE;
+	PROCESS_STATUS->ATTRIBUTES.BASE_PRIORITY = PROCESS_INFORMATION->PROCESS_ATTRIBUTE->BASE_PRIORITY;
+	PROCESS_STATUS->ATTRIBUTES.PERIOD = PROCESS_INFORMATION->PROCESS_ATTRIBUTE->PERIOD;
+	PROCESS_STATUS->ATTRIBUTES.TIME_CAPACITY = PROCESS_INFORMATION->PROCESS_ATTRIBUTE->TIME_CAPACITY;
+	PROCESS_STATUS->ATTRIBUTES.DEADLINE = PROCESS_INFORMATION->PROCESS_ATTRIBUTE->DEADLINE;
+	PROCESS_STATUS->CURRENT_PRIORITY = PROCESS_INFORMATION->CURRENT_PRIORITY;
+	PROCESS_STATUS->DEADLINE_TIME = PROCESS_INFORMATION->DEADLINE_TIME;
+	PROCESS_STATUS->PROCESS_STATE = PROCESS_INFORMATION->PROCESS_STATE;
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Process creation method
+void CREATE_PROCESS(PROCESS_ATTRIBUTE_TYPE *ATTRIBUTES, PROCESS_ID_TYPE *PROCESS_ID, RETURN_CODE_TYPE *RETURN_CODE) {
+	PROCESS_ID_TYPE PROCESS_IDENTIFIER;
+	PROCESS_INFORMATION_TYPE *PROCESS_INFORMATION;
+	PROCESS_CONFIGURATION_TYPE *PROCESS_CONFIGURATION;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies operating mode
+	if (_CURRENT_PARTITION_INFORMATION->OPERATING_MODE == NORMAL) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets free identifier
+	PROCESS_IDENTIFIER = _CURRENT_PARTITION_INFORMATION->PROCESS_COUNT;
+
+	// Verifies process count
+	if (PROCESS_IDENTIFIER >= _CURRENT_PARTITION_INFORMATION->PARTITION_CONFIGURATION->MAXIMUM_PROCESS_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets process identifier
+	GET_PROCESS_ID(ATTRIBUTES->NAME, &PROCESS_IDENTIFIER, RETURN_CODE);
+
+	// Verifies process identifier
+	if (*RETURN_CODE == NO_ERROR) {
+
+		// Sets return code
+		*RETURN_CODE = NO_ACTION;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies base priority
+	if ((ATTRIBUTES->BASE_PRIORITY < MIN_PRIORITY_VALUE) || (ATTRIBUTES->BASE_PRIORITY > MAX_PRIORITY_VALUE)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies period granularity
+	if (ATTRIBUTES->PERIOD % PORT_TICKWINDOW != 0) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies time capacity
+	if (ATTRIBUTES->TIME_CAPACITY != INFINITE_TIME_VALUE) {
+
+		// Verifies time capacity granularity
+		if (ATTRIBUTES->TIME_CAPACITY % PORT_TICKWINDOW != 0) {
+
+			// Sets return code
+			*RETURN_CODE = INVALID_PARAM;
+
+			// Exits core
+			EXIT_CORE();
+			return;
+		}
+	}
+
+	// Gets process information
+	PROCESS_INFORMATION = &_CURRENT_PARTITION_INFORMATION->PROCESS_INFORMATION[PROCESS_IDENTIFIER];
+
+	// Gets process configuration
+	PROCESS_CONFIGURATION = CONFIGURATION_GETPROCESSCONFIGURATION(_CURRENT_PARTITION_INFORMATION->PARTITION_CONFIGURATION, ATTRIBUTES->NAME);
+
+	// Verifies process configuration
+	if (PROCESS_CONFIGURATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Sets process configuration
+	PROCESS_INFORMATION->PROCESS_CONFIGURATION = PROCESS_CONFIGURATION;
+
+	// Calls hook
+	if (!PORT_HOOK_BEFORE_CREATE_PROCESS(_CURRENT_PARTITION_INFORMATION, PROCESS_INFORMATION)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Allocates memory for process context - If pointer is not null, keeps it unchanged
+	HEAP_ALLOCATE(&SYSTEM_INFORMATION.REC_HEAP, (heapPOINTER *) &PROCESS_INFORMATION->CONTEXT.PORT_CONTEXT, sizeof(PORT_CONTEXT_TYPE), false);
+
+	// Verifies process context memory
+	if (PROCESS_INFORMATION->CONTEXT.PORT_CONTEXT == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies partition initialized flag
+	if (!_CURRENT_PARTITION_INFORMATION->INITIALIZED) {
+
+		// Initializes process context
+		PORT_INITIALIZECONTEXT(&PROCESS_INFORMATION->CONTEXT);
+
+		// Sets process context default system state
+		PROCESS_INFORMATION->CONTEXT.DEFAULT_SYSTEM_STATE = SYSTEMSTATE_PROCESS;
+	}
+
+	// Verifies process stack configuration
+	if ((PROCESS_CONFIGURATION->PROCESS_STACK_ADDRESS == null) || (PROCESS_CONFIGURATION->PROCESS_STACK_SIZE == null)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Sets up process
+	PROCESS_INFORMATION->PROCESS_ATTRIBUTE = ATTRIBUTES;
+	PROCESS_INFORMATION->IDENTIFIER = _CURRENT_PARTITION_INFORMATION->PROCESS_COUNT;
+	PROCESS_INFORMATION->PROCESS_STATE = DORMANT;
+	if (PROCESS_INFORMATION->CONTEXT.IDENTIFIER == null) {
+		PROCESS_INFORMATION->CONTEXT.IDENTIFIER = (SYSTEM_INFORMATION.NEXT_CONTEXT_IDENTIFIER++);
+	}
+	PROCESS_INFORMATION->CONTEXT.STACK_BOTTOM = PROCESS_CONFIGURATION->PROCESS_STACK_ADDRESS;
+	PROCESS_INFORMATION->CONTEXT.STACK_TOP = (STACKROW_TYPE *) ((UINTPOINTER_TYPE) PROCESS_INFORMATION->CONTEXT.STACK_BOTTOM + (UINTPOINTER_TYPE) PROCESS_CONFIGURATION->PROCESS_STACK_SIZE);
+	PROCESS_INFORMATION->CONTEXT.CORE_DEPTH = 0;
+	PROCESS_INFORMATION->CONTEXT.SYSTEM_PARTITION_CONTEXT = _CURRENT_PARTITION_INFORMATION->CONTEXT.SYSTEM_PARTITION_CONTEXT;
+	PROCESS_INFORMATION->CONTEXT.ENTRY_POINT = ATTRIBUTES->ENTRY_POINT;
+	PROCESS_INFORMATION->CONTEXT.RETURN_POINT = &RETURNPOINT_PROCESS;
+	PROCESS_INFORMATION->CONTEXT.PARAMETER1 = null;
+	PROCESS_INFORMATION->CONTEXT.PARAMETER2 = null;
+
+	// Counts created process
+	_CURRENT_PARTITION_INFORMATION->PROCESS_COUNT++;
+
+	// Calls hook
+	if (!PORT_HOOK_AFTER_CREATE_PROCESS(_CURRENT_PARTITION_INFORMATION, PROCESS_INFORMATION)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Sets process identifier
+	*PROCESS_ID = PROCESS_IDENTIFIER;
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Priority setter
+void SET_PRIORITY(PROCESS_ID_TYPE PROCESS_ID, PRIORITY_TYPE PRIORITY, RETURN_CODE_TYPE *RETURN_CODE) {
+	PROCESS_INFORMATION_TYPE *PROCESS_INFORMATION;
+	priorityqueueRECORD *REC_RECORD;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies process identifier
+	if (PROCESS_ID >= _CURRENT_PARTITION_INFORMATION->PROCESS_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies priority
+	if ((PRIORITY < MIN_PRIORITY_VALUE) || (PRIORITY > MAX_PRIORITY_VALUE)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets process information
+	PROCESS_INFORMATION = &_CURRENT_PARTITION_INFORMATION->PROCESS_INFORMATION[PROCESS_ID];
+
+	// Verifies process state
+	if (PROCESS_INFORMATION->PROCESS_STATE == DORMANT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Sets current priority
+	PROCESS_INFORMATION->CURRENT_PRIORITY = PRIORITY;
+
+	// Verifies process ready priority queue entry
+	if (PROCESS_INFORMATION->ENT_PROCESSREADY.REC_ENQUEUED != null) {
+
+		// Gets process ready priority queue record
+		REC_RECORD = PROCESS_INFORMATION->ENT_PROCESSREADY.REC_ENQUEUED;
+
+		// Removes process ready priority queue entry
+		PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSREADY);
+
+		// Fills process ready priority queue entry
+		PROCESS_INFORMATION->ENT_PROCESSREADY.PRI_PRIORITY = (priorityqueuePRIORITY) PROCESS_INFORMATION->CURRENT_PRIORITY;
+		PROCESS_INFORMATION->ENT_PROCESSREADY.VAL_VALUE = (priorityqueueVALUE) PROCESS_INFORMATION->IDENTIFIER;
+
+		// Enqueues process ready priority queue entry
+		PRIORITYQUEUE_ENQUEUE(REC_RECORD, &PROCESS_INFORMATION->ENT_PROCESSREADY);
+	}
+
+	// Verifies if process waiting resource priority queue entry is enqueued
+	if (PRIORITYQUEUE_ISENQUEUED(&PROCESS_INFORMATION->ENT_PROCESSWAITING_RESOURCE)) {
+
+		// Gets process waiting resource priority queue record
+		REC_RECORD = PROCESS_INFORMATION->ENT_PROCESSWAITING_RESOURCE.REC_ENQUEUED;
+
+		// Verifies if process waiting resource priority queue is prioritized
+		if (PRIORITYQUEUE_ISPRIORITIZED(REC_RECORD)) {
+
+			// Removes process waiting resource priority queue entry
+			PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSWAITING_RESOURCE);
+
+			// Fills process waiting resource priority queue entry
+			PROCESS_INFORMATION->ENT_PROCESSWAITING_RESOURCE.PRI_PRIORITY = (priorityqueuePRIORITY) PROCESS_INFORMATION->CURRENT_PRIORITY;
+			PROCESS_INFORMATION->ENT_PROCESSWAITING_RESOURCE.VAL_VALUE = (priorityqueueVALUE) PROCESS_INFORMATION->IDENTIFIER;
+
+			// Enqueues process waiting resource priority queue entry
+			PRIORITYQUEUE_ENQUEUE(REC_RECORD, &PROCESS_INFORMATION->ENT_PROCESSWAITING_RESOURCE);
+		}
+	}
+
+	// Verifies lock level
+	if (_CURRENT_PARTITION_INFORMATION->LOCK_LEVEL == 0) {
+
+		// Yields
+		PORT_YIELD();
+	}
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Self-suspend method
+void SUSPEND_SELF(SYSTEM_TIME_TYPE TIME_OUT, RETURN_CODE_TYPE *RETURN_CODE) {
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies current process information
+	if (_CURRENT_PROCESS_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies lock level and error handler state
+	if ((_CURRENT_PARTITION_INFORMATION->LOCK_LEVEL > 0) || (_CURRENT_PARTITION_INFORMATION->ERRORHANDLER_INFORMATION.RUNNING)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies timeout
+	if ((TIME_OUT < 0) && (TIME_OUT != INFINITE_TIME_VALUE)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies periodic process
+	if (_CURRENT_PROCESS_INFORMATION->PROCESS_ATTRIBUTE->PERIOD != APERIODIC_PERIOD_VALUE) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies timeout
+	if (TIME_OUT == 0) {
+
+		// Sets return code
+		*RETURN_CODE = NO_ERROR;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Removes priority queue entries
+	PRIORITYQUEUE_REMOVE(&_CURRENT_PROCESS_INFORMATION->ENT_PROCESSREADY);
+	PRIORITYQUEUE_REMOVE(&_CURRENT_PROCESS_INFORMATION->ENT_PROCESSDEADLINE);
+
+	// Sets process state
+	_CURRENT_PROCESS_INFORMATION->PROCESS_STATE = WAITING;
+
+	// Sets suspended flag
+	_CURRENT_PROCESS_INFORMATION->SUSPENDED = true;
+
+	// Verifies timeout
+	if (TIME_OUT != INFINITE_TIME_VALUE) {
+
+		// Sets suspended with timeout flag
+		_CURRENT_PROCESS_INFORMATION->SUSPENDED_TIMEOUT = true;
+
+		// Sets wait and wake time
+		_CURRENT_PROCESS_INFORMATION->WAIT_TIME = CLOCK_GETSYSTEMTIME();
+		_CURRENT_PROCESS_INFORMATION->WAKE_TIME = INFINITE_TIME_VALUE;
+
+		// Fills process waiting timeout priority queue entry
+		_CURRENT_PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT.PRI_PRIORITY = (priorityqueuePRIORITY) (CLOCK_GETSYSTEMTIME() + TIME_OUT);
+		_CURRENT_PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT.VAL_VALUE = (priorityqueueVALUE) _CURRENT_PROCESS_INFORMATION->IDENTIFIER;
+
+		// Enqueues process waiting timeout priority queue entry
+		PRIORITYQUEUE_ENQUEUE(&_CURRENT_PARTITION_INFORMATION->REC_PROCESSWAITING_TIMEOUT, &_CURRENT_PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT);
+
+		// Yields
+		PORT_YIELD();
+
+		// Removes priority queue entries
+		PRIORITYQUEUE_REMOVE(&_CURRENT_PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT);
+
+		// Verifies time expiration
+		if (_CURRENT_PROCESS_INFORMATION->WAKE_TIME != INFINITE_TIME_VALUE) {
+
+			// Sets return code
+			*RETURN_CODE = TIMED_OUT;
+		} else {
+
+			// Sets return code
+			*RETURN_CODE = NO_ERROR;
+		}
+	} else {
+
+		// Yields
+		PORT_YIELD();
+
+		// Sets return code
+		*RETURN_CODE = NO_ERROR;
+	}
+
+	// Sets release time
+	_CURRENT_PROCESS_INFORMATION->RELEASE_TIME = CLOCK_GETSYSTEMTIME();
+
+	// Sets deadline time
+	if (_CURRENT_PROCESS_INFORMATION->PROCESS_ATTRIBUTE->TIME_CAPACITY != INFINITE_TIME_VALUE) {
+		_CURRENT_PROCESS_INFORMATION->DEADLINE_TIME = _CURRENT_PROCESS_INFORMATION->RELEASE_TIME + _CURRENT_PROCESS_INFORMATION->PROCESS_ATTRIBUTE->TIME_CAPACITY;
+	} else {
+		_CURRENT_PROCESS_INFORMATION->DEADLINE_TIME = INFINITE_TIME_VALUE;
+	}
+
+	// Verifies deadline time
+	if (_CURRENT_PROCESS_INFORMATION->DEADLINE_TIME != INFINITE_TIME_VALUE) {
+
+		// Fills process deadline priority queue entry
+		_CURRENT_PROCESS_INFORMATION->ENT_PROCESSDEADLINE.PRI_PRIORITY = (priorityqueuePRIORITY) _CURRENT_PROCESS_INFORMATION->DEADLINE_TIME;
+		_CURRENT_PROCESS_INFORMATION->ENT_PROCESSDEADLINE.VAL_VALUE = (priorityqueueVALUE) _CURRENT_PROCESS_INFORMATION->IDENTIFIER;
+
+		// Enqueues process deadline priority queue entry
+		PRIORITYQUEUE_ENQUEUE(&_CURRENT_PARTITION_INFORMATION->REC_PROCESSDEADLINE, &_CURRENT_PROCESS_INFORMATION->ENT_PROCESSDEADLINE);
+	}
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Suspend method
+void SUSPEND(PROCESS_ID_TYPE PROCESS_ID, RETURN_CODE_TYPE *RETURN_CODE) {
+	PROCESS_INFORMATION_TYPE *PROCESS_INFORMATION;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies lock level and process preempted by error handler
+	if ((_CURRENT_PARTITION_INFORMATION->LOCK_LEVEL > 0) && (PROCESS_ID == _CURRENT_PARTITION_INFORMATION->ERRORHANDLER_INFORMATION.PREEMPTED_PROCESS_IDENTIFIER)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies process identifier
+	if (PROCESS_ID >= _CURRENT_PARTITION_INFORMATION->PROCESS_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies current process
+	if (_CURRENT_PROCESS_INFORMATION != null) {
+
+		// Verifies process identifier
+		if ((PROCESS_ID == _CURRENT_PROCESS_INFORMATION->IDENTIFIER)) {
+
+			// Sets return code
+			*RETURN_CODE = INVALID_PARAM;
+
+			// Exits core
+			EXIT_CORE();
+			return;
+		}
+	}
+
+	// Gets process information
+	PROCESS_INFORMATION = &_CURRENT_PARTITION_INFORMATION->PROCESS_INFORMATION[PROCESS_ID];
+
+	// Verifies process state
+	if (PROCESS_INFORMATION->PROCESS_STATE == DORMANT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies periodic process
+	if (PROCESS_INFORMATION->PROCESS_ATTRIBUTE->PERIOD != APERIODIC_PERIOD_VALUE) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies suspended flag
+	if (PROCESS_INFORMATION->SUSPENDED) {
+
+		// Sets return code
+		*RETURN_CODE = NO_ACTION;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Removes priority queue entries
+	PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSREADY);
+	PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSDEADLINE);
+
+	// Sets process state
+	PROCESS_INFORMATION->PROCESS_STATE = WAITING;
+
+	// Sets suspended flag
+	PROCESS_INFORMATION->SUSPENDED = true;
+
+	// Sets suspended with timeout flag
+	PROCESS_INFORMATION->SUSPENDED_TIMEOUT = false;
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Resume method
+void RESUME(PROCESS_ID_TYPE PROCESS_ID, RETURN_CODE_TYPE *RETURN_CODE) {
+	PROCESS_INFORMATION_TYPE *PROCESS_INFORMATION;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies process identifier
+	if (PROCESS_ID >= _CURRENT_PARTITION_INFORMATION->PROCESS_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies current process
+	if (_CURRENT_PROCESS_INFORMATION != null) {
+
+		// Verifies process identifier
+		if ((PROCESS_ID == _CURRENT_PROCESS_INFORMATION->IDENTIFIER)) {
+
+			// Sets return code
+			*RETURN_CODE = INVALID_PARAM;
+
+			// Exits core
+			EXIT_CORE();
+			return;
+		}
+	}
+
+	// Gets process information
+	PROCESS_INFORMATION = &_CURRENT_PARTITION_INFORMATION->PROCESS_INFORMATION[PROCESS_ID];
+
+	// Verifies process state
+	if (PROCESS_INFORMATION->PROCESS_STATE == DORMANT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies periodic process
+	if (PROCESS_INFORMATION->PROCESS_ATTRIBUTE->PERIOD != APERIODIC_PERIOD_VALUE) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies suspended flag
+	if (!PROCESS_INFORMATION->SUSPENDED) {
+
+		// Sets return code
+		*RETURN_CODE = NO_ACTION;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies suspended with timeout flag
+	if (PROCESS_INFORMATION->SUSPENDED_TIMEOUT) {
+
+		// Removes priority queue entries
+		PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT);
+	}
+
+	// Sets suspended flag
+	PROCESS_INFORMATION->SUSPENDED = false;
+
+	// Sets suspended with timeout flag
+	PROCESS_INFORMATION->SUSPENDED_TIMEOUT = false;
+
+	// Sets release time
+	PROCESS_INFORMATION->RELEASE_TIME = CLOCK_GETSYSTEMTIME();
+
+	// Sets deadline time
+	if (PROCESS_INFORMATION->PROCESS_ATTRIBUTE->TIME_CAPACITY != INFINITE_TIME_VALUE) {
+		PROCESS_INFORMATION->DEADLINE_TIME = PROCESS_INFORMATION->RELEASE_TIME + PROCESS_INFORMATION->PROCESS_ATTRIBUTE->TIME_CAPACITY;
+	} else {
+		PROCESS_INFORMATION->DEADLINE_TIME = INFINITE_TIME_VALUE;
+	}
+
+	// Verifies process waiting entries
+	if ((!PRIORITYQUEUE_ISENQUEUED(&PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT)) && (!PRIORITYQUEUE_ISENQUEUED(&PROCESS_INFORMATION->ENT_PROCESSWAITING_RESOURCE))) {
+
+		// Sets process state
+		PROCESS_INFORMATION->PROCESS_STATE = READY;
+
+		// Fills process ready priority queue entry
+		PROCESS_INFORMATION->ENT_PROCESSREADY.PRI_PRIORITY = (priorityqueuePRIORITY) PROCESS_INFORMATION->CURRENT_PRIORITY;
+		PROCESS_INFORMATION->ENT_PROCESSREADY.VAL_VALUE = (priorityqueueVALUE) PROCESS_INFORMATION->IDENTIFIER;
+
+		// Enqueues process ready priority queue entry
+		PRIORITYQUEUE_ENQUEUE(&_CURRENT_PARTITION_INFORMATION->REC_PROCESSREADY, &PROCESS_INFORMATION->ENT_PROCESSREADY);
+	}
+
+	// Verifies deadline time
+	if (PROCESS_INFORMATION->DEADLINE_TIME != INFINITE_TIME_VALUE) {
+
+		// Fills process deadline priority queue entry
+		PROCESS_INFORMATION->ENT_PROCESSDEADLINE.PRI_PRIORITY = (priorityqueuePRIORITY) PROCESS_INFORMATION->DEADLINE_TIME;
+		PROCESS_INFORMATION->ENT_PROCESSDEADLINE.VAL_VALUE = (priorityqueueVALUE) PROCESS_INFORMATION->IDENTIFIER;
+
+		// Enqueues process deadline priority queue entry
+		PRIORITYQUEUE_ENQUEUE(&_CURRENT_PARTITION_INFORMATION->REC_PROCESSDEADLINE, &PROCESS_INFORMATION->ENT_PROCESSDEADLINE);
+	}
+
+	// Verifies lock level
+	if (_CURRENT_PARTITION_INFORMATION->LOCK_LEVEL == 0) {
+
+		// Yields
+		PORT_YIELD();
+	}
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Self-stop method
+void STOP_SELF(void) {
+	PROCESS_ID_TYPE PROCESS_IDENTIFIER;
+	PROCESS_INFORMATION_TYPE *PROCESS_INFORMATION;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies operating mode
+	if (_CURRENT_PARTITION_INFORMATION->OPERATING_MODE != NORMAL) {
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies error handler state
+	if (!_CURRENT_PARTITION_INFORMATION->ERRORHANDLER_INFORMATION.RUNNING) {
+
+		// Verifies current process information
+		if (_CURRENT_PROCESS_INFORMATION == null) {
+
+			// Exits core
+			EXIT_CORE();
+			return;
+		}
+
+		// Resets lock level
+		_CURRENT_PARTITION_INFORMATION->LOCK_LEVEL = 0;
+
+		// Removes priority queue entries
+		PRIORITYQUEUE_REMOVE(&_CURRENT_PROCESS_INFORMATION->ENT_PROCESSREADY);
+		PRIORITYQUEUE_REMOVE(&_CURRENT_PROCESS_INFORMATION->ENT_PROCESSDEADLINE);
+		PRIORITYQUEUE_REMOVE(&_CURRENT_PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT);
+		PRIORITYQUEUE_REMOVE(&_CURRENT_PROCESS_INFORMATION->ENT_PROCESSWAITING_RESOURCE);
+
+		// Sets suspended flag
+		_CURRENT_PROCESS_INFORMATION->SUSPENDED = false;
+
+		// Sets suspended with timeout flag
+		_CURRENT_PROCESS_INFORMATION->SUSPENDED_TIMEOUT = false;
+
+		// Sets process state
+		_CURRENT_PROCESS_INFORMATION->PROCESS_STATE = DORMANT;
+	} else {
+
+		// Gets process identifier
+		PROCESS_IDENTIFIER = _CURRENT_PARTITION_INFORMATION->ERRORHANDLER_INFORMATION.PREEMPTED_PROCESS_IDENTIFIER;
+
+		// Stops error handler
+		_CURRENT_PARTITION_INFORMATION->ERRORHANDLER_INFORMATION.STOP = true;
+
+		// Verifies previous process state
+		if (_CURRENT_PARTITION_INFORMATION->LOCK_LEVEL > 0) {
+
+			// Verifies error handler preempted process identifier
+			if (PROCESS_IDENTIFIER < _CURRENT_PARTITION_INFORMATION->PROCESS_COUNT) {
+
+				// Gets process information
+				PROCESS_INFORMATION = &_CURRENT_PARTITION_INFORMATION->PROCESS_INFORMATION[PROCESS_IDENTIFIER];
+
+				// Verifies if the process preempted by the error handler is stopped
+				if (PROCESS_INFORMATION->PROCESS_STATE != DORMANT) {
+
+					// Sets process state
+					PROCESS_INFORMATION->PROCESS_STATE = RUNNING;
+
+					// Sets current process information
+					_CURRENT_PARTITION_INFORMATION->CURRENT_PROCESS_INFORMATION = PROCESS_INFORMATION;
+
+					// Sets current context to process context
+					CURRENT_CONTEXT = &PROCESS_INFORMATION->CONTEXT;
+
+					// Switches into previous process
+					PORT_SWITCH();
+
+					// Exits core
+					EXIT_CORE();
+
+					// Must never be reached
+					while (true) {
+					}
+				}
+			}
+		}
+	}
+
+	// Yields
+	PORT_YIELD();
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Stop method
+void STOP(PROCESS_ID_TYPE PROCESS_ID, RETURN_CODE_TYPE *RETURN_CODE) {
+	PROCESS_INFORMATION_TYPE *PROCESS_INFORMATION;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies process identifier
+	if (PROCESS_ID >= _CURRENT_PARTITION_INFORMATION->PROCESS_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies current process
+	if (_CURRENT_PROCESS_INFORMATION != null) {
+
+		// Verifies process identifier
+		if ((PROCESS_ID == _CURRENT_PROCESS_INFORMATION->IDENTIFIER)) {
+
+			// Sets return code
+			*RETURN_CODE = INVALID_PARAM;
+
+			// Exits core
+			EXIT_CORE();
+			return;
+		}
+	}
+
+	// Gets process information
+	PROCESS_INFORMATION = &_CURRENT_PARTITION_INFORMATION->PROCESS_INFORMATION[PROCESS_ID];
+
+	// Verifies process state
+	if (PROCESS_INFORMATION->PROCESS_STATE == DORMANT) {
+
+		// Sets return code
+		*RETURN_CODE = NO_ACTION;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Removes priority queue entries
+	PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSREADY);
+	PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSDEADLINE);
+	PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT);
+	PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSWAITING_RESOURCE);
+
+	// Sets suspended flag
+	PROCESS_INFORMATION->SUSPENDED = false;
+
+	// Sets suspended with timeout flag
+	PROCESS_INFORMATION->SUSPENDED_TIMEOUT = false;
+
+	// Sets process state
+	PROCESS_INFORMATION->PROCESS_STATE = DORMANT;
+
+	// Verifies error handler state and preempted process
+	if ((_CURRENT_PARTITION_INFORMATION->ERRORHANDLER_INFORMATION.RUNNING) && (PROCESS_ID == _CURRENT_PARTITION_INFORMATION->ERRORHANDLER_INFORMATION.PREEMPTED_PROCESS_IDENTIFIER)) {
+
+		// Resets lock level
+		_CURRENT_PARTITION_INFORMATION->LOCK_LEVEL = 0;
+	}
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Start method
+void START(PROCESS_ID_TYPE PROCESS_ID, RETURN_CODE_TYPE *RETURN_CODE) {
+
+	// Starts with no delay
+	DELAYED_START(PROCESS_ID, 0, RETURN_CODE);
+}
+
+// Delayed start method
+void DELAYED_START(PROCESS_ID_TYPE PROCESS_ID, SYSTEM_TIME_TYPE DELAY_TIME, RETURN_CODE_TYPE *RETURN_CODE) {
+	PROCESS_INFORMATION_TYPE *PROCESS_INFORMATION;
+	INDEX_TYPE SCHEDULE_WINDOW_INDEX;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies process identifier
+	if (PROCESS_ID >= _CURRENT_PARTITION_INFORMATION->PROCESS_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets process information
+	PROCESS_INFORMATION = &_CURRENT_PARTITION_INFORMATION->PROCESS_INFORMATION[PROCESS_ID];
+
+	// Verifies process state
+	if (PROCESS_INFORMATION->PROCESS_STATE != DORMANT) {
+
+		// Sets return code
+		*RETURN_CODE = NO_ACTION;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies periodic process delay time
+	if ((PROCESS_INFORMATION->PROCESS_ATTRIBUTE->PERIOD != APERIODIC_PERIOD_VALUE) && (DELAY_TIME >= PROCESS_INFORMATION->PROCESS_ATTRIBUTE->PERIOD)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Removes priority queue entries
+	PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSREADY);
+	PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSDEADLINE);
+	PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT);
+	PRIORITYQUEUE_REMOVE(&PROCESS_INFORMATION->ENT_PROCESSWAITING_RESOURCE);
+
+	// Sets suspended flag
+	PROCESS_INFORMATION->SUSPENDED = false;
+
+	// Sets suspended with timeout flag
+	PROCESS_INFORMATION->SUSPENDED_TIMEOUT = false;
+
+	// Sets current priority
+	PROCESS_INFORMATION->CURRENT_PRIORITY = PROCESS_INFORMATION->PROCESS_ATTRIBUTE->BASE_PRIORITY;
+
+	// Sets delay time
+	PROCESS_INFORMATION->DELAY_TIME = DELAY_TIME;
+
+	// Prepares process context
+	PORT_PREPARECONTEXT(&PROCESS_INFORMATION->CONTEXT);
+
+	// Resets process context system state
+	PROCESS_INFORMATION->CONTEXT.SYSTEM_STATE = PROCESS_INFORMATION->CONTEXT.DEFAULT_SYSTEM_STATE;
+
+	// Verifies periodic/aperiodic process
+	if (PROCESS_INFORMATION->PROCESS_ATTRIBUTE->PERIOD != APERIODIC_PERIOD_VALUE) {
+
+		// Verifies operating mode
+		if (_CURRENT_PARTITION_INFORMATION->OPERATING_MODE == NORMAL) {
+
+			// Calculates schedule window index
+			SCHEDULE_WINDOW_INDEX = _CURRENT_PARTITION_INFORMATION->SCHEDULE_WINDOW_INDEX + 1;
+
+			// Resets schedule window index
+			if (SCHEDULE_WINDOW_INDEX >= _CURRENT_PARTITION_INFORMATION->PARTITION_CONFIGURATION->PARTITION_CONFIGURATION_SCHEDULE->SCHEDULE_WINDOW_SIZE) {
+				SCHEDULE_WINDOW_INDEX = 0;
+			}
+
+			// Period start search loop
+			while (_CURRENT_PARTITION_INFORMATION->PARTITION_CONFIGURATION->PARTITION_CONFIGURATION_SCHEDULE->SCHEDULE_WINDOW[SCHEDULE_WINDOW_INDEX].PERIOD_START == false) {
+
+				// Moves schedule window index
+				SCHEDULE_WINDOW_INDEX++;
+
+				// Resets schedule window index
+				if (SCHEDULE_WINDOW_INDEX >= _CURRENT_PARTITION_INFORMATION->PARTITION_CONFIGURATION->PARTITION_CONFIGURATION_SCHEDULE->SCHEDULE_WINDOW_SIZE) {
+					SCHEDULE_WINDOW_INDEX = 0;
+				}
+			}
+
+			// Sets release time
+			if (SCHEDULE_WINDOW_INDEX <= _CURRENT_PARTITION_INFORMATION->SCHEDULE_WINDOW_INDEX) {
+				PROCESS_INFORMATION->RELEASE_TIME = MODULE_INFORMATION.NEXT_MAJOR_FRAME_START + _CURRENT_PARTITION_INFORMATION->PARTITION_CONFIGURATION->PARTITION_CONFIGURATION_SCHEDULE->SCHEDULE_WINDOW[SCHEDULE_WINDOW_INDEX].START + PROCESS_INFORMATION->DELAY_TIME;
+			} else {
+				PROCESS_INFORMATION->RELEASE_TIME = MODULE_INFORMATION.MAJOR_FRAME_START + _CURRENT_PARTITION_INFORMATION->PARTITION_CONFIGURATION->PARTITION_CONFIGURATION_SCHEDULE->SCHEDULE_WINDOW[SCHEDULE_WINDOW_INDEX].START + PROCESS_INFORMATION->DELAY_TIME;
+			}
+
+			// Sets deadline time
+			if (PROCESS_INFORMATION->PROCESS_ATTRIBUTE->TIME_CAPACITY != INFINITE_TIME_VALUE) {
+				PROCESS_INFORMATION->DEADLINE_TIME = PROCESS_INFORMATION->RELEASE_TIME + PROCESS_INFORMATION->PROCESS_ATTRIBUTE->TIME_CAPACITY;
+			} else {
+				PROCESS_INFORMATION->DEADLINE_TIME = INFINITE_TIME_VALUE;
+			}
+
+			// Sets process state
+			PROCESS_INFORMATION->PROCESS_STATE = WAITING;
+
+			// Sets wait and wake time
+			PROCESS_INFORMATION->WAIT_TIME = CLOCK_GETSYSTEMTIME();
+			PROCESS_INFORMATION->WAKE_TIME = INFINITE_TIME_VALUE;
+
+			// Fills process waiting timeout priority queue entry
+			PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT.PRI_PRIORITY = (priorityqueuePRIORITY) PROCESS_INFORMATION->RELEASE_TIME;
+			PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT.VAL_VALUE = (priorityqueueVALUE) PROCESS_INFORMATION->IDENTIFIER;
+
+			// Enqueues process waiting timeout priority queue entry
+			PRIORITYQUEUE_ENQUEUE(&_CURRENT_PARTITION_INFORMATION->REC_PROCESSWAITING_TIMEOUT, &PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT);
+		} else {
+
+			// Sets process state
+			PROCESS_INFORMATION->PROCESS_STATE = WAITING;
+		}
+	} else {
+
+		// Verifies operating mode
+		if (_CURRENT_PARTITION_INFORMATION->OPERATING_MODE == NORMAL) {
+
+			// Verifies delay time
+			if (PROCESS_INFORMATION->DELAY_TIME == 0) {
+
+				// Sets release time
+				PROCESS_INFORMATION->RELEASE_TIME = CLOCK_GETSYSTEMTIME();
+
+				// Sets deadline time
+				if (PROCESS_INFORMATION->PROCESS_ATTRIBUTE->TIME_CAPACITY != INFINITE_TIME_VALUE) {
+					PROCESS_INFORMATION->DEADLINE_TIME = PROCESS_INFORMATION->RELEASE_TIME + PROCESS_INFORMATION->PROCESS_ATTRIBUTE->TIME_CAPACITY;
+				} else {
+					PROCESS_INFORMATION->DEADLINE_TIME = INFINITE_TIME_VALUE;
+				}
+
+				// Sets process state
+				PROCESS_INFORMATION->PROCESS_STATE = READY;
+
+				// Fills process ready priority queue entry
+				PROCESS_INFORMATION->ENT_PROCESSREADY.PRI_PRIORITY = (priorityqueuePRIORITY) PROCESS_INFORMATION->CURRENT_PRIORITY;
+				PROCESS_INFORMATION->ENT_PROCESSREADY.VAL_VALUE = (priorityqueueVALUE) PROCESS_INFORMATION->IDENTIFIER;
+
+				// Enqueues process ready priority queue entry
+				PRIORITYQUEUE_ENQUEUE(&_CURRENT_PARTITION_INFORMATION->REC_PROCESSREADY, &PROCESS_INFORMATION->ENT_PROCESSREADY);
+
+				// Verifies deadline time
+				if (PROCESS_INFORMATION->DEADLINE_TIME != INFINITE_TIME_VALUE) {
+
+					// Fills process deadline priority queue entry
+					PROCESS_INFORMATION->ENT_PROCESSDEADLINE.PRI_PRIORITY = (priorityqueuePRIORITY) PROCESS_INFORMATION->DEADLINE_TIME;
+					PROCESS_INFORMATION->ENT_PROCESSDEADLINE.VAL_VALUE = (priorityqueueVALUE) PROCESS_INFORMATION->IDENTIFIER;
+
+					// Enqueues process deadline priority queue entry
+					PRIORITYQUEUE_ENQUEUE(&_CURRENT_PARTITION_INFORMATION->REC_PROCESSDEADLINE, &PROCESS_INFORMATION->ENT_PROCESSDEADLINE);
+				}
+			} else {
+
+				// Sets release time
+				PROCESS_INFORMATION->RELEASE_TIME = CLOCK_GETSYSTEMTIME() + PROCESS_INFORMATION->DELAY_TIME;
+
+				// Sets deadline time
+				if (PROCESS_INFORMATION->PROCESS_ATTRIBUTE->TIME_CAPACITY != INFINITE_TIME_VALUE) {
+					PROCESS_INFORMATION->DEADLINE_TIME = PROCESS_INFORMATION->RELEASE_TIME + PROCESS_INFORMATION->PROCESS_ATTRIBUTE->TIME_CAPACITY;
+				} else {
+					PROCESS_INFORMATION->DEADLINE_TIME = INFINITE_TIME_VALUE;
+				}
+
+				// Sets process state
+				PROCESS_INFORMATION->PROCESS_STATE = WAITING;
+
+				// Sets wait and wake time
+				PROCESS_INFORMATION->WAIT_TIME = CLOCK_GETSYSTEMTIME();
+				PROCESS_INFORMATION->WAKE_TIME = INFINITE_TIME_VALUE;
+
+				// Fills process waiting timeout priority queue entry
+				PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT.PRI_PRIORITY = (priorityqueuePRIORITY) PROCESS_INFORMATION->RELEASE_TIME;
+				PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT.VAL_VALUE = (priorityqueueVALUE) PROCESS_INFORMATION->IDENTIFIER;
+
+				// Enqueues process waiting timeout priority queue entry
+				PRIORITYQUEUE_ENQUEUE(&_CURRENT_PARTITION_INFORMATION->REC_PROCESSWAITING_TIMEOUT, &PROCESS_INFORMATION->ENT_PROCESSWAITING_TIMEOUT);
+			}
+		} else {
+
+			// Sets process state
+			PROCESS_INFORMATION->PROCESS_STATE = WAITING;
+		}
+	}
+
+	// Verifies lock level
+	if (_CURRENT_PARTITION_INFORMATION->LOCK_LEVEL == 0) {
+
+		// Yields
+		PORT_YIELD();
+	}
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Lock preemption method
+void LOCK_PREEMPTION(LOCK_LEVEL_TYPE *LOCK_LEVEL, RETURN_CODE_TYPE *RETURN_CODE) {
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies operating mode
+	if ((_CURRENT_PARTITION_INFORMATION->OPERATING_MODE != NORMAL) || (_CURRENT_PARTITION_INFORMATION->ERRORHANDLER_INFORMATION.RUNNING)) {
+
+		// Sets return code
+		*RETURN_CODE = NO_ACTION;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies lock level
+	if (_CURRENT_PARTITION_INFORMATION->LOCK_LEVEL >= MAX_LOCK_LEVEL) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Increases lock level
+	_CURRENT_PARTITION_INFORMATION->LOCK_LEVEL = _CURRENT_PARTITION_INFORMATION->LOCK_LEVEL + 1;
+
+	// Sets lock level
+	*LOCK_LEVEL = _CURRENT_PARTITION_INFORMATION->LOCK_LEVEL;
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Unlock preemption method
+void UNLOCK_PREEMPTION(LOCK_LEVEL_TYPE *LOCK_LEVEL, RETURN_CODE_TYPE *RETURN_CODE) {
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies operating mode, lock level and error handler state
+	if ((_CURRENT_PARTITION_INFORMATION->OPERATING_MODE != NORMAL) || (_CURRENT_PARTITION_INFORMATION->LOCK_LEVEL == 0) || (_CURRENT_PARTITION_INFORMATION->ERRORHANDLER_INFORMATION.RUNNING)) {
+
+		// Sets return code
+		*RETURN_CODE = NO_ACTION;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Decreases lock level
+	_CURRENT_PARTITION_INFORMATION->LOCK_LEVEL = _CURRENT_PARTITION_INFORMATION->LOCK_LEVEL - 1;
+
+	// Sets lock level
+	*LOCK_LEVEL = _CURRENT_PARTITION_INFORMATION->LOCK_LEVEL;
+
+	// Verifies lock level
+	if (_CURRENT_PARTITION_INFORMATION->LOCK_LEVEL == 0) {
+
+		// Yields
+		PORT_YIELD();
+	}
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Self identifier getter
+void GET_MY_ID(PROCESS_ID_TYPE *PROCESS_ID, RETURN_CODE_TYPE *RETURN_CODE) {
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies current process information
+	if ((_CURRENT_PROCESS_INFORMATION == null) || (_CURRENT_PARTITION_INFORMATION->ERRORHANDLER_INFORMATION.RUNNING)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets current process identifier
+	*PROCESS_ID = _CURRENT_PROCESS_INFORMATION->IDENTIFIER;
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}

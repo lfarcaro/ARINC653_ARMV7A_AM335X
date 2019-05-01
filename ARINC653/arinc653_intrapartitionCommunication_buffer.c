@@ -1,0 +1,527 @@
+// ARINC653 includes
+#include "arinc653_core.h"
+
+// Create buffer method
+void CREATE_BUFFER(BUFFER_NAME_TYPE BUFFER_NAME, MESSAGE_SIZE_TYPE MAX_MESSAGE_SIZE, MESSAGE_RANGE_TYPE MAX_NB_MESSAGE, QUEUING_DISCIPLINE_TYPE QUEUING_DISCIPLINE, BUFFER_ID_TYPE *BUFFER_ID, RETURN_CODE_TYPE *RETURN_CODE) {
+	BUFFER_ID_TYPE BUFFER_IDENTIFIER;
+	BUFFER_INFORMATION_TYPE *BUFFER_INFORMATION;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies operating mode
+	if (_CURRENT_PARTITION_INFORMATION->OPERATING_MODE == NORMAL) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets free identifier
+	BUFFER_IDENTIFIER = _CURRENT_PARTITION_INFORMATION->BUFFER_COUNT;
+
+	// Verifies buffer count
+	if (BUFFER_IDENTIFIER >= _CURRENT_PARTITION_INFORMATION->PARTITION_CONFIGURATION->MAXIMUM_BUFFER_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets buffer identifier
+	GET_BUFFER_ID(BUFFER_NAME, &BUFFER_IDENTIFIER, RETURN_CODE);
+
+	// Verifies buffer identifier
+	if (*RETURN_CODE == NO_ERROR) {
+
+		// Sets return code
+		*RETURN_CODE = NO_ACTION;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies maximum message count
+	if ((MAX_NB_MESSAGE < PORT_INTRAPARTITIONCOMMUNICATION_BUFFER_MINIMUMMESSAGECOUNT) || (MAX_NB_MESSAGE > PORT_INTRAPARTITIONCOMMUNICATION_BUFFER_MAXIMUMMESSAGECOUNT)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies maximum message size
+	if ((MAX_MESSAGE_SIZE < PORT_INTRAPARTITIONCOMMUNICATION_BUFFER_MINIMUMMESSAGESIZE) || (MAX_MESSAGE_SIZE > PORT_INTRAPARTITIONCOMMUNICATION_BUFFER_MAXIMUMMESSAGESIZE)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies queuing discipline
+	if ((QUEUING_DISCIPLINE != FIFO) && (QUEUING_DISCIPLINE != PRIORITY)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets buffer information
+	BUFFER_INFORMATION = &_CURRENT_PARTITION_INFORMATION->BUFFER_INFORMATION[BUFFER_IDENTIFIER];
+
+	// Allocates memory for messages - If pointer is not null, keeps it unchanged
+	HEAP_ALLOCATE(&_CURRENT_PARTITION_INFORMATION->REC_HEAP, (heapPOINTER *) &BUFFER_INFORMATION->MESSAGES, MAX_NB_MESSAGE * MAX_MESSAGE_SIZE, false);
+
+	// Verifies messages memory
+	if (BUFFER_INFORMATION->MESSAGES == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Allocates memory for message lengths - If pointer is not null, keeps it unchanged
+	HEAP_ALLOCATE(&_CURRENT_PARTITION_INFORMATION->REC_HEAP, (heapPOINTER *) &BUFFER_INFORMATION->MESSAGES_LENGTH, MAX_NB_MESSAGE * sizeof(MESSAGE_SIZE_TYPE), false);
+
+	// Verifies message lengths memory
+	if (BUFFER_INFORMATION->MESSAGES_LENGTH == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Allocates memory for name - If pointer is not null, keeps it unchanged
+	HEAP_ALLOCATE(&_CURRENT_PARTITION_INFORMATION->REC_HEAP, (heapPOINTER *) &BUFFER_INFORMATION->NAME, MAX_NAME_LENGTH, false);
+
+	// Verifies name memory
+	if (BUFFER_INFORMATION->NAME == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Copies name
+	if (!COMMON_COPYSTRING(BUFFER_NAME, BUFFER_INFORMATION->NAME, MAX_NAME_LENGTH)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Sets up buffer
+	BUFFER_INFORMATION->IDENTIFIER = _CURRENT_PARTITION_INFORMATION->BUFFER_COUNT;
+	// BUFFER_INFORMATION->NAME = BUFFER_NAME; // Already copied
+	BUFFER_INFORMATION->MAX_MESSAGE_SIZE = MAX_MESSAGE_SIZE;
+	BUFFER_INFORMATION->MAX_NB_MESSAGE = MAX_NB_MESSAGE;
+	BUFFER_INFORMATION->QUEUING_DISCIPLINE = QUEUING_DISCIPLINE;
+
+	// Clears buffer priority queue
+	PRIORITYQUEUE_CLEAR(&BUFFER_INFORMATION->REC_BUFFER, (QUEUING_DISCIPLINE == PRIORITY ? true : false), false);
+
+	// Counts created buffer
+	_CURRENT_PARTITION_INFORMATION->BUFFER_COUNT++;
+
+	// Sets buffer identifier
+	*BUFFER_ID = BUFFER_IDENTIFIER;
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Send buffer method
+void SEND_BUFFER(BUFFER_ID_TYPE BUFFER_ID, MESSAGE_ADDR_TYPE MESSAGE_ADDR, MESSAGE_SIZE_TYPE LENGTH, SYSTEM_TIME_TYPE TIME_OUT, RETURN_CODE_TYPE *RETURN_CODE) {
+	BUFFER_INFORMATION_TYPE *BUFFER_INFORMATION;
+	INDEX_TYPE MESSAGE_INDEX;
+	INDEX_TYPE CHARACTER_INDEX;
+	priorityqueueENTRY *ENT_PROCESS;
+	PROCESS_ID_TYPE PROCESS_IDENTIFIER;
+	PROCESS_INFORMATION_TYPE *PROCESS_INFORMATION;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies current process information
+	if (_CURRENT_PROCESS_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies buffer identifier
+	if (BUFFER_ID >= _CURRENT_PARTITION_INFORMATION->BUFFER_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets buffer information
+	BUFFER_INFORMATION = &_CURRENT_PARTITION_INFORMATION->BUFFER_INFORMATION[BUFFER_ID];
+
+	// Verifies length
+	if (LENGTH > BUFFER_INFORMATION->MAX_MESSAGE_SIZE) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies timeout
+	if ((TIME_OUT < 0) && (TIME_OUT != INFINITE_TIME_VALUE)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies message count
+	if (BUFFER_INFORMATION->MESSAGE_COUNT < BUFFER_INFORMATION->MAX_NB_MESSAGE) {
+
+		// Verifies buffer priority queue
+		if (PRIORITYQUEUE_ISEMPTY(&BUFFER_INFORMATION->REC_BUFFER)) {
+
+			// Calculates message index
+			MESSAGE_INDEX = BUFFER_INFORMATION->NEXT_MESSAGE_INDEX + BUFFER_INFORMATION->MESSAGE_COUNT;
+
+			// Fixes message index
+			if (MESSAGE_INDEX >= BUFFER_INFORMATION->MAX_NB_MESSAGE) {
+				MESSAGE_INDEX -= BUFFER_INFORMATION->MAX_NB_MESSAGE;
+			}
+
+			// Copies message into queue
+			for (CHARACTER_INDEX = 0; CHARACTER_INDEX < LENGTH; CHARACTER_INDEX++) {
+				BUFFER_INFORMATION->MESSAGES[(MESSAGE_INDEX * BUFFER_INFORMATION->MAX_MESSAGE_SIZE) + CHARACTER_INDEX] = MESSAGE_ADDR[CHARACTER_INDEX];
+			}
+			BUFFER_INFORMATION->MESSAGES_LENGTH[MESSAGE_INDEX] = LENGTH;
+
+			// Counts message
+			BUFFER_INFORMATION->MESSAGE_COUNT++;
+		} else {
+
+			// Gets buffer priority queue head
+			ENT_PROCESS = BUFFER_INFORMATION->REC_BUFFER.ENT_HEAD;
+
+			// Gets process identifier
+			PROCESS_IDENTIFIER = (PROCESS_ID_TYPE) ENT_PROCESS->VAL_VALUE;
+
+			// Gets process information
+			PROCESS_INFORMATION = &_CURRENT_PARTITION_INFORMATION->PROCESS_INFORMATION[PROCESS_IDENTIFIER];
+
+			// Copies message into receiver address
+			for (CHARACTER_INDEX = 0; CHARACTER_INDEX < LENGTH; CHARACTER_INDEX++) {
+				PROCESS_INFORMATION->BUFFER_RECEIVE_ADDRESS[CHARACTER_INDEX] = MESSAGE_ADDR[CHARACTER_INDEX];
+			}
+			*PROCESS_INFORMATION->BUFFER_RECEIVE_LENGTH = LENGTH;
+
+			// Signals resource
+			SIGNAL_RESOURCE(_CURRENT_PARTITION_INFORMATION->IDENTIFIER, &BUFFER_INFORMATION->REC_BUFFER, true, RETURN_CODE);
+		}
+
+		// Sets return code
+		*RETURN_CODE = NO_ERROR;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Sets address and length
+	_CURRENT_PROCESS_INFORMATION->BUFFER_SEND_ADDRESS = MESSAGE_ADDR;
+	_CURRENT_PROCESS_INFORMATION->BUFFER_SEND_LENGTH = LENGTH;
+
+	// Waits for resource
+	WAIT_RESOURCE(_CURRENT_PARTITION_INFORMATION->IDENTIFIER, _CURRENT_PROCESS_INFORMATION->IDENTIFIER, &BUFFER_INFORMATION->REC_BUFFER, TIME_OUT, RETURN_CODE);
+
+	// If no error occurs, the message will be copied into buffer by a RECEIVE_BUFFER call
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Receive buffer method
+void RECEIVE_BUFFER(BUFFER_ID_TYPE BUFFER_ID, SYSTEM_TIME_TYPE TIME_OUT, MESSAGE_ADDR_TYPE MESSAGE_ADDR, MESSAGE_SIZE_TYPE *LENGTH, RETURN_CODE_TYPE *RETURN_CODE) {
+	BUFFER_INFORMATION_TYPE *BUFFER_INFORMATION;
+	INDEX_TYPE MESSAGE_INDEX;
+	INDEX_TYPE CHARACTER_INDEX;
+	priorityqueueENTRY *ENT_PROCESS;
+	PROCESS_ID_TYPE PROCESS_IDENTIFIER;
+	PROCESS_INFORMATION_TYPE *PROCESS_INFORMATION;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies current process information
+	if (_CURRENT_PROCESS_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies timeout
+	if ((TIME_OUT < 0) && (TIME_OUT != INFINITE_TIME_VALUE)) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies buffer identifier
+	if (BUFFER_ID >= _CURRENT_PARTITION_INFORMATION->BUFFER_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets buffer information
+	BUFFER_INFORMATION = &_CURRENT_PARTITION_INFORMATION->BUFFER_INFORMATION[BUFFER_ID];
+
+	// Verifies message count
+	if (BUFFER_INFORMATION->MESSAGE_COUNT > 0) {
+
+		// Copies message
+		*LENGTH = BUFFER_INFORMATION->MESSAGES_LENGTH[BUFFER_INFORMATION->NEXT_MESSAGE_INDEX];
+		for (CHARACTER_INDEX = 0; CHARACTER_INDEX < *LENGTH; CHARACTER_INDEX++) {
+			MESSAGE_ADDR[CHARACTER_INDEX] = BUFFER_INFORMATION->MESSAGES[(BUFFER_INFORMATION->NEXT_MESSAGE_INDEX * BUFFER_INFORMATION->MAX_MESSAGE_SIZE) + CHARACTER_INDEX];
+		}
+
+		// Counts message
+		BUFFER_INFORMATION->MESSAGE_COUNT--;
+
+		// Moves next message
+		BUFFER_INFORMATION->NEXT_MESSAGE_INDEX++;
+
+		// Fixes message index
+		if (BUFFER_INFORMATION->NEXT_MESSAGE_INDEX >= BUFFER_INFORMATION->MAX_NB_MESSAGE) {
+			BUFFER_INFORMATION->NEXT_MESSAGE_INDEX -= BUFFER_INFORMATION->MAX_NB_MESSAGE;
+		}
+
+		// Verifies buffer priority queue
+		if (!PRIORITYQUEUE_ISEMPTY(&BUFFER_INFORMATION->REC_BUFFER)) {
+
+			// Gets buffer priority queue head
+			ENT_PROCESS = BUFFER_INFORMATION->REC_BUFFER.ENT_HEAD;
+
+			// Gets process identifier
+			PROCESS_IDENTIFIER = (PROCESS_ID_TYPE) ENT_PROCESS->VAL_VALUE;
+
+			// Gets process information
+			PROCESS_INFORMATION = &_CURRENT_PARTITION_INFORMATION->PROCESS_INFORMATION[PROCESS_IDENTIFIER];
+
+			// Calculates message index
+			MESSAGE_INDEX = BUFFER_INFORMATION->NEXT_MESSAGE_INDEX + BUFFER_INFORMATION->MESSAGE_COUNT;
+
+			// Fixes message index
+			if (MESSAGE_INDEX >= BUFFER_INFORMATION->MAX_NB_MESSAGE) {
+				MESSAGE_INDEX -= BUFFER_INFORMATION->MAX_NB_MESSAGE;
+			}
+
+			// Copies message into queue
+			for (CHARACTER_INDEX = 0; CHARACTER_INDEX < PROCESS_INFORMATION->BUFFER_SEND_LENGTH; CHARACTER_INDEX++) {
+				BUFFER_INFORMATION->MESSAGES[(MESSAGE_INDEX * BUFFER_INFORMATION->MAX_MESSAGE_SIZE) + CHARACTER_INDEX] = PROCESS_INFORMATION->BUFFER_SEND_ADDRESS[CHARACTER_INDEX];
+			}
+			BUFFER_INFORMATION->MESSAGES_LENGTH[MESSAGE_INDEX] = PROCESS_INFORMATION->BUFFER_SEND_LENGTH;
+
+			// Counts message
+			BUFFER_INFORMATION->MESSAGE_COUNT++;
+
+			// Signals resource
+			SIGNAL_RESOURCE(_CURRENT_PARTITION_INFORMATION->IDENTIFIER, &BUFFER_INFORMATION->REC_BUFFER, true, RETURN_CODE);
+		}
+
+		// Sets return code
+		*RETURN_CODE = NO_ERROR;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Sets address and length
+	_CURRENT_PROCESS_INFORMATION->BUFFER_RECEIVE_ADDRESS = MESSAGE_ADDR;
+	_CURRENT_PROCESS_INFORMATION->BUFFER_RECEIVE_LENGTH = LENGTH;
+
+	// Waits for resource
+	WAIT_RESOURCE(_CURRENT_PARTITION_INFORMATION->IDENTIFIER, _CURRENT_PROCESS_INFORMATION->IDENTIFIER, &BUFFER_INFORMATION->REC_BUFFER, TIME_OUT, RETURN_CODE);
+
+	// If no error occurs, the message will be copied into buffer by a SEND_BUFFER call
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Buffer identifier getter
+void GET_BUFFER_ID(BUFFER_NAME_TYPE BUFFER_NAME, BUFFER_ID_TYPE *BUFFER_ID, RETURN_CODE_TYPE *RETURN_CODE) {
+	BUFFER_ID_TYPE BUFFER_IDENTIFIER;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Iterates buffers
+	for (BUFFER_IDENTIFIER = 0; BUFFER_IDENTIFIER < _CURRENT_PARTITION_INFORMATION->BUFFER_COUNT; BUFFER_IDENTIFIER++) {
+
+		// Compares names
+		if (COMMON_COMPARESTRINGS(BUFFER_NAME, _CURRENT_PARTITION_INFORMATION->BUFFER_INFORMATION[BUFFER_IDENTIFIER].NAME, MAX_NAME_LENGTH)) {
+
+			// Sets buffer identifier
+			*BUFFER_ID = BUFFER_IDENTIFIER;
+
+			// Sets return code
+			*RETURN_CODE = NO_ERROR;
+
+			// Exits core
+			EXIT_CORE();
+			return;
+		}
+	}
+
+	// Sets return code
+	*RETURN_CODE = INVALID_CONFIG;
+
+	// Exits core
+	EXIT_CORE();
+}
+
+// Buffer status getter
+void GET_BUFFER_STATUS(BUFFER_ID_TYPE BUFFER_ID, BUFFER_STATUS_TYPE *BUFFER_STATUS, RETURN_CODE_TYPE *RETURN_CODE) {
+	BUFFER_INFORMATION_TYPE *BUFFER_INFORMATION;
+
+	// Enters core
+	ENTER_CORE();
+
+	// Verifies current partition information
+	if (_CURRENT_PARTITION_INFORMATION == null) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_MODE;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Verifies buffer identifier
+	if (BUFFER_ID >= _CURRENT_PARTITION_INFORMATION->BUFFER_COUNT) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_PARAM;
+
+		// Exits core
+		EXIT_CORE();
+		return;
+	}
+
+	// Gets buffer information
+	BUFFER_INFORMATION = &_CURRENT_PARTITION_INFORMATION->BUFFER_INFORMATION[BUFFER_ID];
+
+	// Copies status
+	BUFFER_STATUS->NB_MESSAGE = BUFFER_INFORMATION->MESSAGE_COUNT;
+	BUFFER_STATUS->MAX_NB_MESSAGE = BUFFER_INFORMATION->MAX_NB_MESSAGE;
+	BUFFER_STATUS->MAX_MESSAGE_SIZE = BUFFER_INFORMATION->MAX_MESSAGE_SIZE;
+	BUFFER_STATUS->WAITING_PROCESSES = PRIORITYQUEUE_GETCOUNT(&BUFFER_INFORMATION->REC_BUFFER);
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+
+	// Exits core
+	EXIT_CORE();
+}

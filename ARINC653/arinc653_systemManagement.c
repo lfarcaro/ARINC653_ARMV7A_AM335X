@@ -1,0 +1,37 @@
+// ARINC653 includes
+#include "arinc653_core.h"
+
+// System startup method
+void STARTUP_SYSTEM(RETURN_CODE_TYPE *RETURN_CODE) {
+
+	// Calls hook
+	if (!PORT_HOOK_BEFORE_STARTUP_SYSTEM()) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+		return;
+	}
+
+	// Sets system configuration
+	SYSTEM_INFORMATION.SYSTEM_CONFIGURATION = &SYSTEM_CONFIGURATION;
+
+	// Initializes system information
+	INITIALIZE_SYSTEM_INFORMATION();
+
+	// Starts up core
+	STARTUP_CORE();
+
+	// Starts up heap
+	HEAP_STARTUP(&SYSTEM_INFORMATION.REC_HEAP, SYSTEM_INFORMATION.SYSTEM_CONFIGURATION->SYSTEM_HEAP_ADDRESS, SYSTEM_INFORMATION.SYSTEM_CONFIGURATION->SYSTEM_HEAP_SIZE, PORT_HEAP_ALIGNMENT);
+
+	// Calls hook
+	if (!PORT_HOOK_AFTER_STARTUP_SYSTEM()) {
+
+		// Sets return code
+		*RETURN_CODE = INVALID_CONFIG;
+		return;
+	}
+
+	// Sets return code
+	*RETURN_CODE = NO_ERROR;
+}
