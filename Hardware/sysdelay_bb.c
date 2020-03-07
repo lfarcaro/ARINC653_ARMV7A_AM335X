@@ -118,14 +118,7 @@ void Sysdelay(unsigned int milliSec)
 #ifdef DELAY_USE_INTERRUPTS
     unsigned int countVal = TIMER_OVERFLOW - (milliSec * TIMER_1MS_COUNT);
 
-	// Load initial count value
-	DMTimerCounterSet(SOC_DMTIMER_7_REGS, countVal);
-
-	// Loads reload count value
-	DMTimerReloadSet(SOC_DMTIMER_7_REGS, 0);
-
-	// Configures DMTimer
-	DMTimerModeConfigure(SOC_DMTIMER_7_REGS, DMTIMER_AUTORLD_NOCMP_ENABLE);
+    DMTimerCounterSet(SOC_DMTIMER_7_REGS, countVal);
 
     flagIsr = FALSE;
 

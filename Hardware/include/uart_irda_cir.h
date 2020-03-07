@@ -571,7 +571,7 @@ extern unsigned int UARTSpaceAvail(unsigned int baseAdd);
 extern unsigned int UARTCharsAvail(unsigned int baseAdd);
 extern unsigned int UARTCharPutNonBlocking(unsigned int baseAdd,
                                            unsigned char byteWrite);
-extern signed char UARTCharGetNonBlocking(unsigned int baseAdd);
+extern signed char UARTCharGetNonBlocking(unsigned int baseAdd,unsigned char *value);
 extern signed char UARTCharGet(unsigned int baseAdd);
 extern int UARTCharGetTimeout(unsigned int baseAdd,
                                         unsigned int timeOutVal);

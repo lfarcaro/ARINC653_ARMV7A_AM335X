@@ -86,7 +86,7 @@ extern "C" {
 */
 #if defined(am335x) || defined(am335x_15x15) || defined(c6a811x) || \
     defined(am386x) || defined(c6741x)
-#define EHRPWM_HRCNFG           (0x40)
+#define EHRPWM_HRCNFG           (0xC0)
 #endif
 
 

@@ -171,7 +171,7 @@ void MDIOInit(unsigned int baseAddr, unsigned int mdioInputFreq,
 
    HWREG(baseAddr + MDIO_CONTROL) = ((clkDiv & MDIO_CONTROL_CLKDIV)
                                      | MDIO_CONTROL_ENABLE 
-                                     | MDIO_CONTROL_PREAMBLE
+                                     | MDIO_CONTROL_PREAMBLE // http://e2e.ti.com/support/embedded/starterware/f/790/t/325541.aspx
                                      | MDIO_CONTROL_FAULTENB);
 }
 

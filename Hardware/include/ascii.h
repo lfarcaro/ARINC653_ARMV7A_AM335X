@@ -48,7 +48,7 @@ extern "C" {
 
 enum {
     BASE_DECIMAL = 10,
-    BASE_HEXADECIMAL = 16
+    BASE_HEXADECIMAL = 16,
 };
 
 extern unsigned char ASCIIToDigit(unsigned char byte, unsigned int base);

@@ -144,8 +144,13 @@ static portBOOLEAN PORT_PREPARENONGLOBALFLTRANSLATIONTABLE(unsigned int **PTR_FL
 
 	// Verifies system partition context
 	if (BOOL_ISSYSTEMPARTITIONCONTEXT) {
-		UINT_ACCESS = MMU_ACCESS_PL1_RW_PL0_RW; // Free access for system partitions
+		UINT_ACCESS = MMU_ACCESS_PL1_RW_PL0_RW | MMU_ACCESS_EXECUTENEVER; // Free access for system partitions
 	}
+
+	// Verifies measure flag state
+#ifdef MEASURE
+	UINT_ACCESS = MMU_ACCESS_PL1_RW_PL0_RW | MMU_ACCESS_EXECUTENEVER; // For enabling console access
+#endif
 
 	// Verifies access
 	if (UINT_ACCESS != null) {
@@ -161,7 +166,7 @@ static portBOOLEAN PORT_PREPARENONGLOBALFLTRANSLATIONTABLE(unsigned int **PTR_FL
 
 	// Verifies system partition context
 	if (BOOL_ISSYSTEMPARTITIONCONTEXT) {
-		UINT_ACCESS = MMU_ACCESS_PL1_RW_PL0_RW; // Free access for system partitions
+		UINT_ACCESS = MMU_ACCESS_PL1_RW_PL0_RW | MMU_ACCESS_EXECUTENEVER; // Free access for system partitions
 	}
 
 	// Verifies access
@@ -267,7 +272,7 @@ static portBOOLEAN PORT_PREPARENONGLOBALFLTRANSLATIONTABLE(unsigned int **PTR_FL
 
 	// Verifies system partition context
 	if (BOOL_ISSYSTEMPARTITIONCONTEXT) {
-		UINT_ACCESS = MMU_ACCESS_PL1_RW_PL0_RW; // Free access for system partitions
+		UINT_ACCESS = MMU_ACCESS_PL1_RW_PL0_RW | MMU_ACCESS_EXECUTENEVER; // Free access for system partitions
 	}
 
 	// Verifies access
@@ -384,7 +389,7 @@ static portBOOLEAN PORT_PREPARENONGLOBALFLTRANSLATIONTABLE(unsigned int **PTR_FL
 
 		// Verifies system partition context
 		if (BOOL_ISSYSTEMPARTITIONCONTEXT) {
-			UINT_ACCESS = MMU_ACCESS_PL1_RW_PL0_RW; // Free access for system partitions
+			UINT_ACCESS = MMU_ACCESS_PL1_RW_PL0_RW | MMU_ACCESS_EXECUTENEVER; // Free access for system partitions
 		}
 
 		// Verifies access
@@ -401,7 +406,7 @@ static portBOOLEAN PORT_PREPARENONGLOBALFLTRANSLATIONTABLE(unsigned int **PTR_FL
 
 		// Verifies system partition context
 		if (BOOL_ISSYSTEMPARTITIONCONTEXT) {
-			UINT_ACCESS = MMU_ACCESS_PL1_RW_PL0_RW; // Free access for system partitions
+			UINT_ACCESS = MMU_ACCESS_PL1_RW_PL0_RW | MMU_ACCESS_EXECUTENEVER; // Free access for system partitions
 		}
 
 		// Verifies access
@@ -444,7 +449,7 @@ static portBOOLEAN PORT_PREPARENONGLOBALFLTRANSLATIONTABLE(unsigned int **PTR_FL
 
 		// Verifies system partition context
 		if (BOOL_ISSYSTEMPARTITIONCONTEXT) {
-			UINT_ACCESS = MMU_ACCESS_PL1_RW_PL0_RW; // Free access for system partitions
+			UINT_ACCESS = MMU_ACCESS_PL1_RW_PL0_RW | MMU_ACCESS_EXECUTENEVER; // Free access for system partitions
 		}
 
 		// Verifies access
@@ -977,6 +982,32 @@ void PORT_PREPARECONTEXT(CONTEXT_TYPE *CONTEXT) {
 	// Initializes other information
 	// PORT_CONTEXT->CONTEXT_IDENTIFIER = null; // Keeps allocated value
 	// PORT_CONTEXT->FLTRANSLATIONTABLE_ADDRESS = null; // Keeps allocated value
+}
+
+// Tick termination method
+void PORT_TERMINATETICK(void) {
+
+	// Disables DMTimer
+	DMTimerDisable(SOC_DMTIMER_2_REGS);
+
+	// Disables DMTimer interrupts
+	DMTimerIntDisable(SOC_DMTIMER_2_REGS, DMTIMER_INT_OVF_EN_FLAG);
+
+	// Disables system interrupt
+	IntSystemDisable(SYS_INT_TINT2);
+
+	// Unregisters system tick ISR
+	IntUnRegister(SYS_INT_TINT2);
+}
+
+// Module restarting method
+void PORT_RESTARTMODULE(void) {
+
+	// Disables interrupts
+	PORT_DISABLEINTERRUPTS();
+
+	// Resets the platform
+	HWREG(SOC_PRM_DEVICE_REGS) = 0x00000002;
 }
 
 // Abort error handler fault status getter

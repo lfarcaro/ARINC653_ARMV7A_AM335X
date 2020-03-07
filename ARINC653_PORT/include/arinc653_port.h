@@ -88,20 +88,6 @@
 #define ERRORIDENTIFIER_CACHEFAULT 103
 #define ERRORIDENTIFIER_UNDEFINEDINSTRUCTION 104
 
-// Shutdown module macro
-#define PORT_SHUTDOWNMODULE(); {\
-	/*Disables interrupts*/\
-	PORT_DISABLEINTERRUPTS();\
-}
-
-// Restart module macro
-#define PORT_RESTARTMODULE(); {\
-	/*Disables interrupts*/\
-	PORT_DISABLEINTERRUPTS();\
-	/*Resets*/\
-	HWREG(SOC_PRM_DEVICE_REGS) = 0x00000002;\
-}
-
 // Prepare call address - Should store the address from which the current function was called to be retrieved by PORT_GETCALLADDRESS
 #define PORT_PREPARECALLADDRESS(); {\
 	/*Stores LR in stack*/\
@@ -194,6 +180,12 @@ extern void PORT_SWITCH(void);
 
 // Start scheduler method - Defined in ASM module
 extern void PORT_STARTSCHEDULER(void);
+
+// Terminate tick method
+void PORT_TERMINATETICK(void);
+
+// Module restart method
+void PORT_RESTARTMODULE(void);
 
 // Abort error handler method
 void PORT_ABORTERRORHANDLER(unsigned int DFAR, unsigned int DFSR, unsigned int IFAR, unsigned int IFSR, unsigned int LR);

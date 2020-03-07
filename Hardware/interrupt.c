@@ -45,7 +45,7 @@
 #include "interrupt.h"
 #include "hw_types.h"
 #include "soc_AM335x.h"
-//#include "cpu.h"
+#include "cpu.h"
 
 /******************************************************************************
 **                INTERNAL MACRO DEFINITIONS
@@ -457,6 +457,130 @@ unsigned int IntPendingIrqMaskedStatusGet(unsigned int intrNum)
 {
     return ((0 ==(HWREG(SOC_AINTC_REGS + INTC_PENDING_IRQ(intrNum >> REG_IDX_SHIFT))
                   >> (((intrNum & REG_BIT_MASK)) & 0x01))) ? FALSE : TRUE);
+}
+
+/**
+ * \brief  Enables the processor IRQ only in CPSR. Makes the processor to 
+ *         respond to IRQs.  This does not affect the set of interrupts 
+ *         enabled/disabled in the AINTC.
+ *
+ * \param    None
+ *
+ * \return   None
+ *
+ *  Note: This function call shall be done only in previleged mode of ARM
+ **/
+void IntMasterIRQEnable(void)
+{
+    /* Enable IRQ in CPSR.*/
+    CPUirqe();
+
+}
+
+/**
+ * \brief  Disables the processor IRQ only in CPSR.Prevents the processor to 
+ *         respond to IRQs.  This does not affect the set of interrupts 
+ *         enabled/disabled in the AINTC.
+ *
+ * \param    None
+ *
+ * \return   None
+ *
+ *  Note: This function call shall be done only in previleged mode of ARM
+ **/
+void IntMasterIRQDisable(void)
+{
+    /* Disable IRQ in CPSR.*/
+    CPUirqd();
+}
+
+/**
+ * \brief  Enables the processor FIQ only in CPSR. Makes the processor to 
+ *         respond to FIQs.  This does not affect the set of interrupts 
+ *         enabled/disabled in the AINTC.
+ *
+ * \param    None
+ *
+ * \return   None
+ *
+ *  Note: This function call shall be done only in previleged mode of ARM
+ **/
+void IntMasterFIQEnable(void)
+{
+    /* Enable FIQ in CPSR.*/
+    CPUfiqe();
+}
+
+/**
+ * \brief  Disables the processor FIQ only in CPSR.Prevents the processor to 
+ *         respond to FIQs.  This does not affect the set of interrupts 
+ *         enabled/disabled in the AINTC.
+ *
+ * \param    None
+ *
+ * \return   None
+ *
+ *  Note: This function call shall be done only in previleged mode of ARM
+ **/
+void IntMasterFIQDisable(void)
+{
+    /* Disable FIQ in CPSR.*/
+    CPUfiqd();
+}
+
+/**
+ * \brief   Returns the status of the interrupts FIQ and IRQ.
+ *
+ * \param    None
+ *
+ * \return   Status of interrupt as in CPSR.
+ *
+ *  Note: This function call shall be done only in previleged mode of ARM
+ **/
+unsigned int IntMasterStatusGet(void)
+{
+    return CPUIntStatus();
+}
+
+/**
+ * \brief  Read and save the stasus and Disables the processor IRQ .
+ *         Prevents the processor to respond to IRQs.  
+ *
+ * \param    None
+ *
+ * \return   Current status of IRQ
+ *
+ *  Note: This function call shall be done only in previleged mode of ARM
+ **/
+unsigned char IntDisable(void)
+{
+    unsigned char status;
+
+    /* Reads the current status.*/
+    status = (IntMasterStatusGet() & 0xFF);
+
+    /* Disable the Interrupts.*/
+    IntMasterIRQDisable();
+
+    return status;
+}
+
+/**
+ * \brief  Restore the processor IRQ only status. This does not affect 
+ *          the set of interrupts enabled/disabled in the AINTC.
+ *
+ * \param    The status returned by the IntDisable fundtion.
+ *
+ * \return   None
+ *
+ *  Note: This function call shall be done only in previleged mode of ARM
+ **/
+void IntEnable(unsigned char  status)
+{
+    if((status & 0x80) == 0) 
+    {
+        IntMasterIRQEnable();
+    } 
 }
 
 /********************************** End Of File ******************************/

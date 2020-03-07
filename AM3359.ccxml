@@ -25,8 +25,16 @@
                     <subpath id="subpath_12">
                             <router HW_revision="1.0" XML_version="1.2" description="CS_DAP Router" id="CS_DAP_0" isa="CS_DAP">
                                 <subpath id="ModenaSS">
-                                    <cpu HW_revision="1.0" XML_version="1.2" description="Cortex_A8 CPU" id="CortexA8" isa="Cortex_A8">
+                                    <cpu HW_revision="1.0" XML_version="1.2" description="Cortex_A8 CPU" deviceSim="false" id="CortexA8" isa="Cortex_A8">
                                         <property Type="filepathfield" Value="beaglebone.gel" id="GEL File"/>
+                                    </cpu>
+                                </subpath>
+                            <subpath id="PRU">
+                                    <cpu HW_revision="1.0" XML_version="1.2" description="PRU Accelerator" id="PRU_0" isa="TMS192C2026">
+                                        <property Type="filepathfield" Value="AM335x_PRU_ICSS.gel" id="GEL File"/>
+                                    </cpu>
+                                    <cpu HW_revision="1.0" XML_version="1.2" description="PRU Accelerator" id="PRU_1" isa="TMS192C2026">
+                                        <property Type="filepathfield" Value="AM335x_PRU_ICSS.gel" id="GEL File"/>
                                     </cpu>
                                 </subpath>
                             </router>

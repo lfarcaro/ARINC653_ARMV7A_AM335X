@@ -1,8 +1,7 @@
 /**
- * \file   uart.c
+ * \file   hsi2c.c
  *
- * \brief  This file contains functions which does the platform specific
- *         configurations for UART.
+ * \brief  This file contains functions which configure the hsi2c
  */
 
 /*
@@ -41,44 +40,127 @@
 
 
 #include "hw_control_AM335x.h"
-#include "soc_AM335x.h"
 #include "hw_cm_wkup.h"
-#include "hw_cm_per.h"
+#include "soc_AM335x.h"
 #include "beaglebone.h"
+#include "hw_cm_per.h"
 #include "hw_types.h"
 
+void I2CPinMuxSetup(unsigned int instance)
+{
+    if(instance == 0)
+    {
+         HWREG(SOC_CONTROL_REGS + CONTROL_CONF_I2C0_SDA)  =
+                (CONTROL_CONF_I2C0_SDA_CONF_I2C0_SDA_RXACTIVE  |
+                 CONTROL_CONF_I2C0_SDA_CONF_I2C0_SDA_SLEWCTRL  | 
+                 CONTROL_CONF_I2C0_SDA_CONF_I2C0_SDA_PUTYPESEL   );
+
+         HWREG(SOC_CONTROL_REGS + CONTROL_CONF_I2C0_SCL)  =
+                (CONTROL_CONF_I2C0_SCL_CONF_I2C0_SCL_RXACTIVE  |
+                 CONTROL_CONF_I2C0_SCL_CONF_I2C0_SCL_SLEWCTRL  | 
+                 CONTROL_CONF_I2C0_SCL_CONF_I2C0_SCL_PUTYPESEL );
+
+    } 
+    else if(instance == 1)
+    {
+                               /* I2C_SCLK */   
+         HWREG(SOC_CONTROL_REGS + CONTROL_CONF_SPI0_D1)  = 
+              (CONTROL_CONF_SPI0_D1_CONF_SPI0_D1_PUTYPESEL |
+               CONTROL_CONF_SPI0_D1_CONF_SPI0_D1_RXACTIVE  |
+               CONTROL_CONF_SPI0_D1_CONF_SPI0_D1_SLEWCTRL  |
+               CONTROL_CONF_MUXMODE(2));                     
+                              /* I2C_SDA */
+         HWREG(SOC_CONTROL_REGS + CONTROL_CONF_SPI0_CS0) = 
+              (CONTROL_CONF_SPI0_CS0_CONF_SPI0_CS0_PUTYPESEL |
+               CONTROL_CONF_SPI0_CS0_CONF_SPI0_CS0_RXACTIVE  |
+               CONTROL_CONF_SPI0_D1_CONF_SPI0_D1_SLEWCTRL    |
+               CONTROL_CONF_MUXMODE(2));
+    }
+
+}
+
 /**
- * \brief   This function selects the UART pins for use. The UART pins
- *          are multiplexed with pins of other peripherals in the SoC
- *          
- * \param   instanceNum       The instance number of the UART to be used.
+ * \brief   This function will configure the required clocks for I2C1 instance.
  *
  * \return  None.
  *
- * \note    This pin multiplexing depends on the profile in which the EVM
- *          is configured.
  */
-void UARTPinMuxSetup(unsigned int instanceNum)
+void I2C1ModuleClkConfig(void)
 {
-     if(0 == instanceNum)
-     {
-          /* RXD */
-          HWREG(SOC_CONTROL_REGS + CONTROL_CONF_UART_RXD(0)) = 
-          (CONTROL_CONF_UART0_RXD_CONF_UART0_RXD_PUTYPESEL | 
-           CONTROL_CONF_UART0_RXD_CONF_UART0_RXD_RXACTIVE);
+    HWREG(SOC_PRCM_REGS + CM_PER_L3S_CLKSTCTRL) |= 
+                             CM_PER_L3S_CLKSTCTRL_CLKTRCTRL_SW_WKUP;
 
-          /* TXD */
-          HWREG(SOC_CONTROL_REGS + CONTROL_CONF_UART_TXD(0)) = 
-           CONTROL_CONF_UART0_TXD_CONF_UART0_TXD_PUTYPESEL;
-     }
+    while((HWREG(SOC_PRCM_REGS + CM_PER_L3S_CLKSTCTRL) & 
+     CM_PER_L3S_CLKSTCTRL_CLKTRCTRL) != CM_PER_L3S_CLKSTCTRL_CLKTRCTRL_SW_WKUP);
+
+    HWREG(SOC_PRCM_REGS + CM_PER_L3_CLKSTCTRL) |= 
+                             CM_PER_L3_CLKSTCTRL_CLKTRCTRL_SW_WKUP;
+
+    while((HWREG(SOC_PRCM_REGS + CM_PER_L3_CLKSTCTRL) & 
+     CM_PER_L3_CLKSTCTRL_CLKTRCTRL) != CM_PER_L3_CLKSTCTRL_CLKTRCTRL_SW_WKUP);
+
+    HWREG(SOC_PRCM_REGS + CM_PER_L3_INSTR_CLKCTRL) |= 
+                             CM_PER_L3_INSTR_CLKCTRL_MODULEMODE_ENABLE;
+
+    while((HWREG(SOC_PRCM_REGS + CM_PER_L3_INSTR_CLKCTRL) & 
+                               CM_PER_L3_INSTR_CLKCTRL_MODULEMODE) != 
+                                   CM_PER_L3_INSTR_CLKCTRL_MODULEMODE_ENABLE);
+
+    HWREG(SOC_PRCM_REGS + CM_PER_L3_CLKCTRL) |= 
+                             CM_PER_L3_CLKCTRL_MODULEMODE_ENABLE;
+
+    while((HWREG(SOC_PRCM_REGS + CM_PER_L3_CLKCTRL) & 
+        CM_PER_L3_CLKCTRL_MODULEMODE) != CM_PER_L3_CLKCTRL_MODULEMODE_ENABLE);
+
+    HWREG(SOC_PRCM_REGS + CM_PER_OCPWP_L3_CLKSTCTRL) |= 
+                             CM_PER_OCPWP_L3_CLKSTCTRL_CLKTRCTRL_SW_WKUP;
+
+    while((HWREG(SOC_PRCM_REGS + CM_PER_OCPWP_L3_CLKSTCTRL) & 
+                              CM_PER_OCPWP_L3_CLKSTCTRL_CLKTRCTRL) != 
+                                CM_PER_OCPWP_L3_CLKSTCTRL_CLKTRCTRL_SW_WKUP);
+
+    HWREG(SOC_PRCM_REGS + CM_PER_L4LS_CLKSTCTRL) |= 
+                             CM_PER_L4LS_CLKSTCTRL_CLKTRCTRL_SW_WKUP;
+
+    while((HWREG(SOC_PRCM_REGS + CM_PER_L4LS_CLKSTCTRL) & 
+                             CM_PER_L4LS_CLKSTCTRL_CLKTRCTRL) != 
+                               CM_PER_L4LS_CLKSTCTRL_CLKTRCTRL_SW_WKUP);
+
+    HWREG(SOC_PRCM_REGS + CM_PER_L4LS_CLKCTRL) |= 
+                             CM_PER_L4LS_CLKCTRL_MODULEMODE_ENABLE;
+
+    while((HWREG(SOC_PRCM_REGS + CM_PER_L4LS_CLKCTRL) & 
+      CM_PER_L4LS_CLKCTRL_MODULEMODE) != CM_PER_L4LS_CLKCTRL_MODULEMODE_ENABLE);
+
+    HWREG(SOC_PRCM_REGS + CM_PER_I2C1_CLKCTRL) |= 
+                             CM_PER_I2C1_CLKCTRL_MODULEMODE_ENABLE;
+
+    while((HWREG(SOC_PRCM_REGS + CM_PER_I2C1_CLKCTRL) & 
+      CM_PER_I2C1_CLKCTRL_MODULEMODE) != CM_PER_I2C1_CLKCTRL_MODULEMODE_ENABLE);
+
+    while(!(HWREG(SOC_PRCM_REGS + CM_PER_L3S_CLKSTCTRL) & 
+            CM_PER_L3S_CLKSTCTRL_CLKACTIVITY_L3S_GCLK));
+
+    while(!(HWREG(SOC_PRCM_REGS + CM_PER_L3_CLKSTCTRL) & 
+            CM_PER_L3_CLKSTCTRL_CLKACTIVITY_L3_GCLK));
+
+    while(!(HWREG(SOC_PRCM_REGS + CM_PER_OCPWP_L3_CLKSTCTRL) & 
+           (CM_PER_OCPWP_L3_CLKSTCTRL_CLKACTIVITY_OCPWP_L3_GCLK | 
+            CM_PER_OCPWP_L3_CLKSTCTRL_CLKACTIVITY_OCPWP_L4_GCLK)));
+
+    while(!(HWREG(SOC_PRCM_REGS + CM_PER_L4LS_CLKSTCTRL) & 
+           (CM_PER_L4LS_CLKSTCTRL_CLKACTIVITY_L4LS_GCLK | 
+            CM_PER_L4LS_CLKSTCTRL_CLKACTIVITY_I2C_FCLK)));
+    
 }
+
 
 /*
 ** This function enables the system L3 and system L4_WKUP clocks.
-** This also enables the clocks for UART0 instance.
+** This also enables the clocks for I2C0 instance.
 */
 
-void UART0ModuleClkConfig(void)
+void I2C0ModuleClkConfig(void)
 {
     /* Configuring L3 Interface Clocks. */
 
@@ -197,14 +279,14 @@ void UART0ModuleClkConfig(void)
           (HWREG(SOC_CM_WKUP_REGS + CM_WKUP_CM_L3_AON_CLKSTCTRL) &
            CM_WKUP_CM_L3_AON_CLKSTCTRL_CLKTRCTRL));
 
-    /* Writing to MODULEMODE field of CM_WKUP_UART0_CLKCTRL register. */
-    HWREG(SOC_CM_WKUP_REGS + CM_WKUP_UART0_CLKCTRL) |=
-          CM_WKUP_UART0_CLKCTRL_MODULEMODE_ENABLE;
+    /* Writing to MODULEMODE field of CM_WKUP_I2C0_CLKCTRL register. */
+    HWREG(SOC_CM_WKUP_REGS + CM_WKUP_I2C0_CLKCTRL) |=
+          CM_WKUP_I2C0_CLKCTRL_MODULEMODE_ENABLE;
 
     /* Waiting for MODULEMODE field to reflect the written value. */
-    while(CM_WKUP_UART0_CLKCTRL_MODULEMODE_ENABLE !=
-          (HWREG(SOC_CM_WKUP_REGS + CM_WKUP_UART0_CLKCTRL) &
-           CM_WKUP_UART0_CLKCTRL_MODULEMODE));
+    while(CM_WKUP_I2C0_CLKCTRL_MODULEMODE_ENABLE !=
+          (HWREG(SOC_CM_WKUP_REGS + CM_WKUP_I2C0_CLKCTRL) &
+           CM_WKUP_I2C0_CLKCTRL_MODULEMODE));
 
     /* Verifying if the other bits are set to required settings. */
 
@@ -251,21 +333,20 @@ void UART0ModuleClkConfig(void)
            CM_WKUP_CM_L4_WKUP_AON_CLKSTCTRL_CLKACTIVITY_L4_WKUP_AON_GCLK));
 
     /*
-    ** Waiting for CLKACTIVITY_UART0_GFCLK field in CM_WKUP_CLKSTCTRL
+    ** Waiting for CLKACTIVITY_I2C0_GFCLK field in CM_WKUP_CLKSTCTRL
     ** register to attain desired value.
     */
-    while(CM_WKUP_CLKSTCTRL_CLKACTIVITY_UART0_GFCLK !=
+    while(CM_WKUP_CLKSTCTRL_CLKACTIVITY_I2C0_GFCLK !=
           (HWREG(SOC_CM_WKUP_REGS + CM_WKUP_CLKSTCTRL) &
-           CM_WKUP_CLKSTCTRL_CLKACTIVITY_UART0_GFCLK));
+           CM_WKUP_CLKSTCTRL_CLKACTIVITY_I2C0_GFCLK));
 
     /*
-    ** Waiting for IDLEST field in CM_WKUP_UART0_CLKCTRL register to attain
+    ** Waiting for IDLEST field in CM_WKUP_I2C0_CLKCTRL register to attain
     ** desired value.
     */
-    while((CM_WKUP_UART0_CLKCTRL_IDLEST_FUNC <<
-           CM_WKUP_UART0_CLKCTRL_IDLEST_SHIFT) !=
-          (HWREG(SOC_CM_WKUP_REGS + CM_WKUP_UART0_CLKCTRL) &
-           CM_WKUP_UART0_CLKCTRL_IDLEST));
+    while((CM_WKUP_I2C0_CLKCTRL_IDLEST_FUNC <<
+           CM_WKUP_I2C0_CLKCTRL_IDLEST_SHIFT) !=
+          (HWREG(SOC_CM_WKUP_REGS + CM_WKUP_I2C0_CLKCTRL) &
+           CM_WKUP_I2C0_CLKCTRL_IDLEST));
 }
 
-/****************************** End of file *********************************/

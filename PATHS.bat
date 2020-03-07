@@ -1,2 +1,2 @@
-set PATH_CCS=E:\TI\ccsv8
-set PATH_ARINC653=D:\CCSWorkspace\ARINC653_AM335X
+set PATH_CCS=C:\ti\ccs910\ccs
+set PATH_PROJECT=D:\CCSWorkspace\ARINC653_AM335X

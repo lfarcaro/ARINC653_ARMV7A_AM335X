@@ -161,8 +161,10 @@ extern "C" {
 #define  EQEP   0x03
 
 
-
+#ifndef __cplusplus
 typedef char bool;
+#endif
+
 
 //**********************************************************************
 //  API FUNCTION PROTOTYPES
@@ -257,8 +259,6 @@ void EHRPWMClockEnable(unsigned int baseAdd);
 void EHRPWMClockDisable(unsigned int baseAdd);
 unsigned int EHRPWMClockEnableStatusGet(unsigned int baseAdd);
 unsigned int EHRPWMClockDisableStatusGet(unsigned int baseAdd);
-extern void PWMSSModuleClkConfig(unsigned int instanceNum);
-extern void PWMSSTBClkEnable(unsigned int instance);
 
 #ifdef __cplusplus
 }

@@ -3,6 +3,11 @@
 //v1.0 Mar9,2012
 //v1.1 May2,2012  Streamlined DDR PHY configuration routines
 //v1.2 May3,2012  Fixed max DDR PLL config to 266MHz
+//v1.3 Jun3,2014  Added reference to PRU GEL file
+//v1.4 Sep25,2015 Added System Reset at Connect
+//                Disabling MMU before loading code 
+//v1.5 Nov28,2017 Updated PLL parameters to optimized values
+//                Updated ARM PLL config to match datasheet 	
 //####################################################
 
 
@@ -255,8 +260,8 @@
 //*******************************************************************
 //Watchdog Timer registers
 //*******************************************************************
-#define    WDT1_BASE_ADDR                                        (0x44E35000)  
-#define    WDT1_WSPR                                             (WDT1_BASE_ADDR + 0x48)
+#define    WDT1_BASE_ADDR                                      (0x44E35000)  
+#define    WDT1_WSPR                                           (WDT1_BASE_ADDR + 0x48)
 
 //*****************************************************************************
 //Read write prototype
@@ -274,7 +279,10 @@ UWORD32 CLKIN;
 //*****************************************************************************
 //Global Functions
 //*****************************************************************************
-
+StartUp()
+{
+    GEL_LoadGel("$(GEL_file_dir)/AM335x_PRU_ICSS.gel");
+}
 
 //Watchdog is disabled to eliminate warm resets during debug
 Disable_Watchdog()
@@ -292,9 +300,10 @@ AM335xStartState()
 {
   CPSR &= ~0x20;
   CPSR = (CPSR & ~0x1F) | 0x13;   
+  CP15_CONTROL_REGISTER &= ~0x1;
 }
 
-OnFileLoaded()
+OnPreFileLoaded()
 {
    AM335xStartState();
 }
@@ -333,10 +342,10 @@ OnTargetConnect()
     GEL_MapAddStr(0x56000000, 0, 0x01000000, "R|W", 0);  // SGX530
     GEL_MapAddStr(0x80000000, 0, 0x10000000, "R|W", 0);  // 256MB DDR2 external memory
     GEL_MapOn();
-    AM335xStartState();
-    AM335x_Beaglebone_Initialization();
+    GEL_AdvancedReset("System Reset"); // Reset the board to avoid conflicts with program running from NOR/SPI/SD
+    GEL_Halt();                        // System Reset leaves the core running. Needs to halt it so memory can be accessed
     Disable_Watchdog();
-
+    AM335x_Beaglebone_Initialization();
 }
 
 //******************************************************************************
@@ -392,11 +401,11 @@ GEL_TextOut("****  AM335x ALL PLL Config for OPP == Turbo is in progress .......
 GetInputClockFrequency();
 if(CLKIN==24)
 {
-   MPU_PLL_Config(  CLKIN, 23, 720, 1);
-   CORE_PLL_Config( CLKIN, 23, 1000, 10, 8, 4);
-   DDR_PLL_Config(  CLKIN, 23, 266, 1);
-   PER_PLL_Config(  CLKIN, 23, 960, 5);
-   DISP_PLL_Config( CLKIN, 23, 48, 1);
+   MPU_PLL_Config(  CLKIN, 3, 100, 1);		// 800 MHz
+   CORE_PLL_Config( CLKIN, 2, 125, 10, 8, 4);
+   DDR_PLL_Config(  CLKIN, 11, 133, 1);    	// 266 MHz
+   PER_PLL_Config(  CLKIN, 9, 400, 5);
+   DISP_PLL_Config( CLKIN, 0, 2, 1);
    GEL_TextOut(" ****  AM335x ALL PLL Config for OPP == Turbo is done ......... \n","Output",1,1,1);
 }
 else
@@ -414,11 +423,11 @@ GEL_TextOut("****  AM335x ALL PLL Config for OPP == OPP120 is in progress ......
 GetInputClockFrequency();
 if(CLKIN==24)
 {
-   MPU_PLL_Config(  CLKIN, 23, 650, 1);
-   CORE_PLL_Config( CLKIN, 23, 1000, 10, 8, 4);
-   DDR_PLL_Config(  CLKIN, 23, 266, 1);
-   PER_PLL_Config(  CLKIN, 23, 960, 5);
-   DISP_PLL_Config( CLKIN, 23, 48, 1);
+   MPU_PLL_Config(  CLKIN, 0, 30, 1);		// 720 MHz
+   CORE_PLL_Config( CLKIN, 2, 125, 10, 8, 4);
+   DDR_PLL_Config(  CLKIN, 11, 133, 1);    	// 266 MHz
+   PER_PLL_Config(  CLKIN, 9, 400, 5);
+   DISP_PLL_Config( CLKIN, 0, 2, 1);
    GEL_TextOut(" ****  AM335x ALL ADPLL Config for OPP == OPP120 is done ......... \n","Output",1,1,1);
 }
 else 
@@ -431,11 +440,11 @@ GEL_TextOut("****  AM335x ALL PLL Config for OPP == OPP100 is in progress ......
 GetInputClockFrequency();
 if(CLKIN==24)
 {
-   MPU_PLL_Config(  CLKIN, 23, 550, 1);
-   CORE_PLL_Config( CLKIN, 23, 1000, 10, 8, 4);
-   DDR_PLL_Config(  CLKIN, 23, 266, 1);
-   PER_PLL_Config(  CLKIN, 23, 960, 5);
-   DISP_PLL_Config( CLKIN, 23, 48, 1);
+   MPU_PLL_Config(  CLKIN, 0, 25, 1);		// 600 MHz
+   CORE_PLL_Config( CLKIN, 2, 125, 10, 8, 4);
+   DDR_PLL_Config(  CLKIN, 11, 133, 1);    	// 266 MHz
+   PER_PLL_Config(  CLKIN, 9, 400, 5);
+   DISP_PLL_Config( CLKIN, 0, 2, 1);
    GEL_TextOut("****  AM335x ALL ADPLL Config for OPP == OPP100 is Done ......... \n","Output",1,1,1);
 }
 else 

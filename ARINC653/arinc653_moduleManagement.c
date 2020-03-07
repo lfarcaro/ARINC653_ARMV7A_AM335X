@@ -133,6 +133,11 @@ void SET_MODULE_MODE(OPERATING_MODE_TYPE OPERATING_MODE, RETURN_CODE_TYPE *RETUR
 	// Enters core
 	ENTER_CORE();
 
+	// Verifies measure flag state
+#ifndef MEASURE
+
+	// To enable scheduler being restarted
+
 	// Verifies operating mode transition
 	if (MODULE_INFORMATION.OPERATING_MODE == IDLE) {
 
@@ -143,6 +148,7 @@ void SET_MODULE_MODE(OPERATING_MODE_TYPE OPERATING_MODE, RETURN_CODE_TYPE *RETUR
 		EXIT_CORE();
 		return;
 	}
+#endif
 
 	// Verifies operating mode
 	if (OPERATING_MODE == IDLE) {
@@ -150,12 +156,15 @@ void SET_MODULE_MODE(OPERATING_MODE_TYPE OPERATING_MODE, RETURN_CODE_TYPE *RETUR
 		// Sets operating mode
 		MODULE_INFORMATION.OPERATING_MODE = OPERATING_MODE;
 
-		// Shuts down module
-		PORT_SHUTDOWNMODULE();
+		// Terminates tick
+		PORT_TERMINATETICK();
 
-		// If reached, processing stops here
-		while (true) {
-		}
+		// Yields
+		PORT_YIELD();
+
+		// Exits core
+		EXIT_CORE();
+		return;
 	}
 
 	// Verifies operating mode

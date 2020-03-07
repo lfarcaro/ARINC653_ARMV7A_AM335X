@@ -172,7 +172,11 @@ void DMTimerPreScalerClkEnable(unsigned int baseAdd, unsigned int ptv)
     DMTimerWaitForWrite(DMTIMER_WRITE_POST_TCLR, baseAdd);
 
     /* Set the PTV field and enable the pre-scaler clock */
-    HWREG(baseAdd + DMTIMER_TCLR) |= (ptv & (DMTIMER_TCLR_PTV | DMTIMER_TCLR_PRE));
+    HWREG(baseAdd + DMTIMER_TCLR) |= (ptv & DMTIMER_TCLR_PTV);
+    DMTimerWaitForWrite(DMTIMER_WRITE_POST_TCLR, baseAdd);
+
+    HWREG(baseAdd + DMTIMER_TCLR) |=DMTIMER_TCLR_PRE;
+    DMTimerWaitForWrite(DMTIMER_WRITE_POST_TCLR, baseAdd);
 }
 
 /**

@@ -1,3 +1,4 @@
 call PATHS.bat
-cd %PATH_ARINC653%\Debug
+mkdir %PATH_PROJECT%\Debug
+cd %PATH_PROJECT%\Debug
 %PATH_CCS%\utils\bin\gmake.exe -k -j 8 all
