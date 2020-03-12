@@ -7,6 +7,12 @@
 // SNIPPET_START GLOBAL_INCLUDES
 // Test include
 #include "test.h"
+
+// Measure include
+#include "measure.h"
+
+// Algorithm include
+#include "algorithm.h"
 // SNIPPET_END
 
 // -------------------- MODULE DESCRIPTION START --------------------
@@ -47,16 +53,74 @@ static PARTITION_ATTRIBUTE_TYPE PARTITION3_PARTITION_ATTRIBUTE = {
 // PARTITION3 partition identifier
 static PARTITION_ID_TYPE PARTITION3_PARTITION_ID;
 
+// SNIPPET_START MODULE_GLOBAL_DEFINITIONS
+// Definitions
+#define COMMAND_HANDSHAKE 0x005AA500
+#define COMMAND_CONFIGURE 0x11000011
+#define COMMAND_MEASURE 0xFF0000FF
+#define RESPONSE_ERROR 0x00000000
+#define RESPONSE_SUCCESS 0x11111111
+
+// Definitions
+#define COMMAND_CONFIGURE_BPRED_DIS MEASURE_FLAG_BPRED_DIS
+#define COMMAND_CONFIGURE_BPRED_ENA MEASURE_FLAG_BPRED_ENA
+#define COMMAND_CONFIGURE_BPRED_CLR MEASURE_FLAG_BPRED_CLR
+#define COMMAND_CONFIGURE_DCACHE_DIS MEASURE_FLAG_DCACHE_DIS
+#define COMMAND_CONFIGURE_DCACHE_ENA MEASURE_FLAG_DCACHE_ENA
+#define COMMAND_CONFIGURE_DCACHE_CLR MEASURE_FLAG_DCACHE_CLR
+#define COMMAND_CONFIGURE_ICACHE_DIS MEASURE_FLAG_ICACHE_DIS
+#define COMMAND_CONFIGURE_ICACHE_ENA MEASURE_FLAG_ICACHE_ENA
+#define COMMAND_CONFIGURE_ICACHE_CLR MEASURE_FLAG_ICACHE_CLR
+// SNIPPET_END
+
 // SNIPPET_START MODULE_GLOBAL_VARIABLES
 // SNIPPET_END
 
 // SNIPPET_START MODULE_FUNCTIONS
+portBOOLEAN READ_INTEGER(portUINT32 *INTEGER) {
+	portINT32 BYTE1, BYTE2, BYTE3, BYTE4;
+
+	// Receives bytes
+	if ((BYTE1 = UARTConsoleGetcTimeout(5000000)) == -1) {
+        return false;
+    }
+	if ((BYTE2 = UARTConsoleGetcTimeout(5000)) == -1) {
+	    return false;
+	}
+	if ((BYTE3 = UARTConsoleGetcTimeout(5000)) == -1) {
+        return false;
+    }
+	if ((BYTE4 = UARTConsoleGetcTimeout(5000)) == -1) {
+        return false;
+    }
+
+	// Returns
+	*INTEGER = ((BYTE1 & 0xFF) << 24) | ((BYTE2 & 0xFF) << 16) | ((BYTE3 & 0xFF) << 8) | ((BYTE4 & 0xFF) << 0);
+	return true;
+}
+
+void WRITE_INTEGER(portUINT32 INTEGER) {
+	portBYTE BYTE1, BYTE2, BYTE3, BYTE4;
+
+	// Splits
+	BYTE1 = (INTEGER >> 24) & 0xFF;
+	BYTE2 = (INTEGER >> 16) & 0xFF;
+	BYTE3 = (INTEGER >> 8) & 0xFF;
+	BYTE4 = INTEGER & 0xFF;
+
+	// Transmits
+	UARTConsolePutc(BYTE1);
+	UARTConsolePutc(BYTE2);
+	UARTConsolePutc(BYTE3);
+	UARTConsolePutc(BYTE4);
+}
 // SNIPPET_END
 
 // Module default partition
 void MODULE_DEFAULTPARTITION(void) {
 	RETURN_CODE_TYPE RETURN_CODE;
 	// SNIPPET_START MODULE_DEFAULTPARTITION_VARIABLES
+	portUINT32 VALUE;
 	// SNIPPET_END
 
 	// Starts system up
@@ -107,6 +171,12 @@ void MODULE_DEFAULTPARTITION(void) {
 	// SNIPPET_START MODULE_DEFAULTPARTITION_INITIALIZATION
 	// Starts up test
 	TEST_STARTUP();
+
+	// Starts up measure
+	MEASURE_STARTUP();
+
+	// Starts up algorithm
+	ALGORITHM_STARTUP();
 	// SNIPPET_END
 
 	// Sets module mode
@@ -127,9 +197,46 @@ void MODULE_DEFAULTPARTITION(void) {
 	while (true) {
 
 		// SNIPPET_START MODULE_IDLEPARTITION_CODE
-		// Sets LEDs pattern
-		TEST_LED1_OFF();
-		TEST_LED2_OFF();
+        // Reads command
+        if (!READ_INTEGER(&VALUE)) {
+            continue;
+        }
+
+        // Verifies command
+        if (VALUE == COMMAND_HANDSHAKE) {
+
+            // Replies handshake
+            WRITE_INTEGER(VALUE);
+        } else if (VALUE == COMMAND_CONFIGURE) {
+
+            // Reads flags
+            if (!READ_INTEGER(&VALUE)) {
+                continue;
+            }
+
+            // Configures measurement
+            MEASURE_CONFIGURE(VALUE);
+        } else if (VALUE == COMMAND_MEASURE) {
+
+            // Confirms command
+            WRITE_INTEGER(VALUE);
+
+            // Initializes algorithm
+            ALGORITHM_INITIALIZE();
+
+            // Triggers measurement
+            MEASURE_TRIGGER();
+
+            // Reads measurement
+            VALUE = MEASURE_READ();
+
+            // Writes measurement
+            WRITE_INTEGER(VALUE);
+        } else {
+
+            // Writes response
+            WRITE_INTEGER(RESPONSE_ERROR);
+        }
 		// SNIPPET_END
 	}
 }

@@ -147,8 +147,8 @@ static portBOOLEAN PORT_PREPARENONGLOBALFLTRANSLATIONTABLE(unsigned int **PTR_FL
 		UINT_ACCESS = MMU_ACCESS_PL1_RW_PL0_RW | MMU_ACCESS_EXECUTENEVER; // Free access for system partitions
 	}
 
-	// Verifies measure flag state
-#ifdef MEASURE
+	// Verifies debug state
+#ifdef DEBUG
 	UINT_ACCESS = MMU_ACCESS_PL1_RW_PL0_RW | MMU_ACCESS_EXECUTENEVER; // For enabling console access
 #endif
 
@@ -573,6 +573,9 @@ portBOOLEAN PORT_HOOK_BEFORE_STARTUP_SYSTEM(void) {
 	portUINTBASE *VECTORTABLESOURCE;
 	portUINTBASE *VECTORTABLEDESTINATION;
 	PORT_SYSTEM_CONFIGURATION_TYPE *PORT_SYSTEM_CONFIGURATION;
+
+	// Disables branch prediction
+	CP15BranchPredictionDisable();
 
 	// Disables cache
 	CacheDisable(CACHE_ICACHE | CACHE_DCACHE);

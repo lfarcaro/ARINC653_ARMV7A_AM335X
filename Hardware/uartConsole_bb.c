@@ -207,4 +207,16 @@ unsigned char UARTConsoleGetc(void)
      return ((unsigned char)UARTCharGet(UART_CONSOLE_BASE));
 }
 
+/**
+ * \brief   This function reads a character from the serial console with timeout.
+ *
+ * \param   none
+ *
+ * \return  Character as input from the console
+ */
+int UARTConsoleGetcTimeout(unsigned int timeOutVal)
+{
+     return UARTCharGetTimeout(UART_CONSOLE_BASE, timeOutVal);
+}
+
 /****************************** End Of File *********************************/

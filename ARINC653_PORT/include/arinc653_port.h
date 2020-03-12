@@ -15,6 +15,7 @@
 #include "mmu.h"
 #include "ethernet.h"
 #include "protocol.h"
+#include "uartStdio.h"
 
 // Optional hardware includes
 #include "tsc_adc.h"

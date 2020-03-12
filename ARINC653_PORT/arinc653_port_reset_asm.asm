@@ -71,13 +71,6 @@ PORT_RESETHANDLER_CLEARBSSLOOP:
 	MCR p15, #0, R0, c5, c0, #0 ; Clears DFSR
 	MCR p15, #0, R0, c6, c0, #2 ; Clears IFAR
 	MCR p15, #0, R0, c5, c0, #1 ; Clears IFSR
-	; Invalidates and enables branch prediction
-	;MOV R0, #0
-	;MCR P15, #0, R0, C7, C5, #6
-	;ISB
-	;MRC P15, #0, R0, C1, C0, #0
-	;ORR R0, R0, #0x00000800
-	;MCR P15, #0, R0, C1, C0, #0
 	; Enables NEON/VFP coprocessor
 	MRC P15, #0, R1, C1, C0, #2 ; R1 = Access control register
 	ORR R1, R1, #(0x3 << 30) ; Disables D16-D31 and Advanced SIMD
