@@ -1,1 +1,1 @@
-Obtained from TI's AM335X StarterWare
+The tiimage tool was obtained from TI's AM335X StarterWare (https://sourceforge.net/p/starterwarefree/code/ci/master/tree/).
