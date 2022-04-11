@@ -30,10 +30,10 @@
                                     </cpu>
                                 </subpath>
                             <subpath id="PRU">
-                                    <cpu HW_revision="1.0" XML_version="1.2" description="PRU Accelerator" id="PRU_0" isa="TMS192C2026">
+                                    <cpu HW_revision="1.0" XML_version="1.2" description="PRU Accelerator" deviceSim="false" id="PRU_0" isa="TMS192C2026">
                                         <property Type="filepathfield" Value="AM335x_PRU_ICSS.gel" id="GEL File"/>
                                     </cpu>
-                                    <cpu HW_revision="1.0" XML_version="1.2" description="PRU Accelerator" id="PRU_1" isa="TMS192C2026">
+                                    <cpu HW_revision="1.0" XML_version="1.2" description="PRU Accelerator" deviceSim="false" id="PRU_1" isa="TMS192C2026">
                                         <property Type="filepathfield" Value="AM335x_PRU_ICSS.gel" id="GEL File"/>
                                     </cpu>
                                 </subpath>
