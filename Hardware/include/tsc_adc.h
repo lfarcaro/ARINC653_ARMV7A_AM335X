@@ -212,6 +212,7 @@
 #define TSCADC_WPNSW_PIN_OFF                    (0)   
 
 
+extern void TSCADCModuleClkConfig(void);
 extern unsigned int TSCADCPinMuxSetUp(void);
 
 void TSCADCSetADCPowerDown(unsigned int baseAdd);
@@ -288,6 +289,7 @@ void TSCADCModuleStateSet(unsigned int baseAdd, unsigned int enableModule);
 void TSCADCRawIntStatusSet(unsigned int baseAdd, unsigned int intFlag);
 void TSCADCStepIDTagConfig(unsigned int baseAdd, unsigned int enableStepIDTag);
 unsigned int TSCADCFIFOADCDataRead(unsigned int baseAdd, unsigned int FIFOSel);
+void TSCADCFIFOADCDataStepIDRead(unsigned int baseAdd, unsigned int FIFOSel, unsigned short *data, unsigned char *stepID);
 unsigned int TSCADCIsDMAFIFOEnabled(unsigned int baseAdd, unsigned int fifoSel);
 unsigned int TSCADCIntStatusRead(unsigned int baseAdd, unsigned int intFlag);
 void TSCADCWakeUpPenEventConfig(unsigned int baseAdd, unsigned int enableWakeUp);

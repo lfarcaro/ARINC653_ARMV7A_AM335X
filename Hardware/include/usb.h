@@ -313,6 +313,13 @@ extern "C"
 
 //*****************************************************************************
 //
+// This macro converts an endpoint to an index.
+//
+//*****************************************************************************
+#define USB_EP_TO_INDEX(n) (n)
+
+//*****************************************************************************
+//
 // The following are values that can be passed to USBFIFOConfigSet() as the
 // ulFIFOSize parameter.
 //

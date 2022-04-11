@@ -59,7 +59,7 @@
 
 /* If delay using interrupts is desire define this. If polling is desired,
    undefine this */
-#define DELAY_USE_INTERRUPTS            1  
+//#define DELAY_USE_INTERRUPTS            1
 
 /******************************************************************************
 **                      INTERNAL FUNCTION PROTOTYPES

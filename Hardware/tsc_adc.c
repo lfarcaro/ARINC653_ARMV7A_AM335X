@@ -1616,6 +1616,25 @@ unsigned int TSCADCFIFOADCDataRead(unsigned int baseAdd, unsigned int FIFOSel)
 }
 
 /**
+ * \brief   This API gets the ADC Sampled data along with the step ID that produced it
+ *
+ * \param   baseAdd   Base Address of the TouchScreen Module Registers.
+ * \param   FIFOSel    Selects the FIFO.\n
+ * \param   data      Pointer to the variable that should receive the sample data\n
+ * \param   stepID    Pointer to the variable that should receive the ID of the step that produced the data\n
+ *
+ * \return  returns the channel ID
+ *
+ **/
+void TSCADCFIFOADCDataStepIDRead(unsigned int baseAdd, unsigned int FIFOSel, unsigned short *data, unsigned char *stepID)
+{
+    unsigned int value;
+    value = HWREG(baseAdd + TSC_ADC_SS_FIFODATA(FIFOSel));
+    *data = (value & TSC_ADC_SS_FIFODATA_ADC_DATA) >> TSC_ADC_SS_FIFODATA_ADC_DATA_SHIFT;
+    *stepID = (value & TSC_ADC_SS_FIFODATA_ADCCHLNID) >> TSC_ADC_SS_FIFODATA_ADCCHLNID_SHIFT;
+}
+
+/**
  * \brief   This API gets the Number Of Words Currently in FIFO.
  *
  * \param   baseAdd  Base Address of the TouchScreen Module Registers.

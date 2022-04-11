@@ -562,6 +562,9 @@ extern "C" {
 /******************************************************************************/
 /*                        DCAN API PROTOTYPES                                 */
 /******************************************************************************/
+extern unsigned int DCANPinMuxSetUp(unsigned int instanceNum);
+extern void DCANMsgRAMInit(unsigned int instanceNum);
+extern void DCANModuleClkConfig(void);
 extern void DCANInitModeSet(unsigned int baseAdd);
 extern void DCANNormalModeSet(unsigned int baseAdd);
 extern void DCANBitTimingConfig(unsigned int baseAdd, 

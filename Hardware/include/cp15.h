@@ -63,6 +63,8 @@ extern "C" {
 /*
 ** API prototypes
 */
+extern void CP15Ttbr0Set(unsigned int ttbr);
+extern void CP15Ttbr1Set(unsigned int ttbr);
 extern void CP15AuxControlFeatureEnable(unsigned int enFlag);
 extern void CP15AuxControlFeatureDisable(unsigned int disFlag);
 extern void CP15DCacheCleanBuff(unsigned int bufPtr, unsigned int size);

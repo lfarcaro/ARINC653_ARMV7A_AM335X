@@ -71,6 +71,18 @@ void UARTPinMuxSetup(unsigned int instanceNum)
           HWREG(SOC_CONTROL_REGS + CONTROL_CONF_UART_TXD(0)) = 
            CONTROL_CONF_UART0_TXD_CONF_UART0_TXD_PUTYPESEL;
      }
+     else
+     if(1 == instanceNum)
+     {
+          /* RXD */
+          HWREG(SOC_CONTROL_REGS + CONTROL_CONF_UART_RXD(1)) =
+          (CONTROL_CONF_UART1_RXD_CONF_UART1_RXD_PUTYPESEL |
+           CONTROL_CONF_UART1_RXD_CONF_UART1_RXD_RXACTIVE);
+
+          /* TXD */
+          HWREG(SOC_CONTROL_REGS + CONTROL_CONF_UART_TXD(1)) =
+           CONTROL_CONF_UART1_TXD_CONF_UART1_TXD_PUTYPESEL;
+     }
 }
 
 /*

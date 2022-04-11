@@ -38,6 +38,8 @@
 ;******************************************************************************
 
 ;****************************** Global Symbols*********************************
+        .global CP15Ttbr0Set
+        .global CP15Ttbr1Set
         .global CP15ICacheDisable
         .global CP15DCacheDisable
         .global CP15ICacheEnable
@@ -73,6 +75,24 @@
 
 ; This source file is assembled for ARM instructions
         .state32
+
+;*****************************************************************************
+; This API sets TTBR0 Register.
+; r0 - Translation Table Base Address
+;*****************************************************************************
+CP15Ttbr0Set:
+	MCR p15, #0, r0, c2, c0, #0
+	DMB
+	BX lr
+
+;*****************************************************************************
+; This API sets TTBR1 Register.
+; r0 - Translation Table Base Address
+;*****************************************************************************
+CP15Ttbr1Set:
+	MCR p15, #0, r0, c2, c0, #1
+	DMB
+	BX lr
 
 ;*****************************************************************************
 ; This API disable the InSTRuction cache.
