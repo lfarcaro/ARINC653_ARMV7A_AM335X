@@ -222,6 +222,9 @@ typedef struct _PARTITION_INFORMATION_TYPE PARTITION_INFORMATION_TYPE;
 // Module information
 struct _MODULE_INFORMATION_TYPE {
 	MODULE_CONFIGURATION_TYPE *MODULE_CONFIGURATION;
+	heapRECORD REC_HEAP;
+	IDENTIFIER_TYPE NEXT_CONTEXT_IDENTIFIER; // Next context identifier to be allocated
+	IDENTIFIER_TYPE LAST_CONTEXT_IDENTIFIER; // Last context identifier to be allocated
 	OPERATING_MODE_TYPE OPERATING_MODE;
 	CONTEXT_TYPE CONTEXT;
 	PARTITION_ID_TYPE PARTITION_COUNT; // Partition count
@@ -238,28 +241,38 @@ typedef struct _MODULE_INFORMATION_TYPE MODULE_INFORMATION_TYPE;
 // System information
 struct _SYSTEM_INFORMATION_TYPE {
 	SYSTEM_CONFIGURATION_TYPE *SYSTEM_CONFIGURATION;
-	heapRECORD REC_HEAP;
-	IDENTIFIER_TYPE NEXT_CONTEXT_IDENTIFIER; // Used for context identifier allocation
 };
 typedef struct _SYSTEM_INFORMATION_TYPE SYSTEM_INFORMATION_TYPE;
 
 // System information
 extern SYSTEM_INFORMATION_TYPE SYSTEM_INFORMATION;
 
-// Module information
-extern MODULE_INFORMATION_TYPE MODULE_INFORMATION;
+// Core module information (one per core)
+extern MODULE_INFORMATION_TYPE CORE_MODULE_INFORMATION[PORT_CORECOUNT];
 
-// Current context - Context of the running task
-extern CONTEXT_TYPE *CURRENT_CONTEXT;
+// Core current context - Context of the running task (one per core)
+extern CONTEXT_TYPE *CORE_CURRENT_CONTEXT[PORT_CORECOUNT];
 
-// Current context - Context to be reached after the scheduler completes
-extern CONTEXT_TYPE *NEXT_CONTEXT;
+// Core next context - Context to be reached after the scheduler completes (one per core)
+extern CONTEXT_TYPE *CORE_NEXT_CONTEXT[PORT_CORECOUNT];
+
+// Core module information getter macro
+#define _CORE_MODULE_INFORMATION (&CORE_MODULE_INFORMATION[PORT_GETCORE()])
+
+// Core current context getter macro
+#define _CORE_CURRENT_CONTEXT (CORE_CURRENT_CONTEXT[PORT_GETCORE()])
+
+// Core next context getter macro
+#define _CORE_NEXT_CONTEXT (CORE_NEXT_CONTEXT[PORT_GETCORE()])
+
+// Current module information access macro
+#define _CURRENT_MODULE_INFORMATION (MODULE_INFORMATION)
 
 // Current partition information access macro
-#define _CURRENT_PARTITION_INFORMATION (MODULE_INFORMATION.CURRENT_PARTITION_INFORMATION)
+#define _CURRENT_PARTITION_INFORMATION (_CURRENT_MODULE_INFORMATION->CURRENT_PARTITION_INFORMATION)
 
 // Current process information access macro
-#define _CURRENT_PROCESS_INFORMATION (MODULE_INFORMATION.CURRENT_PARTITION_INFORMATION->CURRENT_PROCESS_INFORMATION)
+#define _CURRENT_PROCESS_INFORMATION (_CURRENT_PARTITION_INFORMATION->CURRENT_PROCESS_INFORMATION)
 
 // Startup core method
 void STARTUP_CORE(void);
@@ -278,9 +291,6 @@ void INITIALIZE_PARTITION_INFORMATION(PARTITION_ID_TYPE PARTITION_IDENTIFIER, BO
 
 // Module information initialization method
 void INITIALIZE_MODULE_INFORMATION(void);
-
-// System information initialization method
-void INITIALIZE_SYSTEM_INFORMATION(void);
 
 // Module health monitoring callback return point
 void RETURNPOINT_MODULE_HEALTHMONITORINGCALLBACK(void);
