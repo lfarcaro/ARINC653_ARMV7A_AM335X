@@ -1,5 +1,5 @@
-#ifndef PARTITION3_H_
-#define PARTITION3_H_
+#ifndef PARTITION3_PARTITION_H_
+#define PARTITION3_PARTITION_H_
 
 // ARINC653 includes
 #include "arinc653.h"

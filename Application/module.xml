@@ -233,27 +233,18 @@
 <!-- SNIPPET_END -->
 <!-- SNIPPET_START PARTITION -->
 <Partition EntryPoint="PARTITION1_DEFAULTPROCESS" PartitionIdentifier="1" PartitionName="PARTITION1">
-<Process Name="PARTITION1_PROCESS1" StackSize="256">
-<Proc_Ext:Extension BasePriority="10" PeriodSeconds="0.100" TimeCapacitySeconds="0.050" Deadline="HARD"/>
+<Process Name="PROCESS1" StackSize="256">
+<Proc_Ext:Extension BasePriority="30" PeriodSeconds="0.500" TimeCapacitySeconds="0.250" Deadline="HARD"/>
 </Process>
-<Process Name="PARTITION1_PROCESS2" StackSize="256">
-<Proc_Ext:Extension BasePriority="20" PeriodSeconds="0.100" TimeCapacitySeconds="0.025" Deadline="HARD"/>
+<Process Name="PROCESS2" StackSize="256">
+<Proc_Ext:Extension BasePriority="20" PeriodSeconds="0.250" TimeCapacitySeconds="0.100" Deadline="HARD"/>
 </Process>
-<PartitionExt:Extension StackSize="256" ErrorHandler="PARTITION1_ERRORHANDLER" ErrorHandlerStackSize="256"/>
+<PartitionExt:Extension StackSize="256" ErrorHandler="PARTITION1_ERRORHANDLER" ErrorHandlerStackSize="256" MaximumBlackboardCount="1"/>
 </Partition>
 <Partition EntryPoint="PARTITION2_DEFAULTPROCESS" PartitionIdentifier="2" PartitionName="PARTITION2">
-<Process Name="PARTITION2_PROCESS1" StackSize="256">
-<Proc_Ext:Extension BasePriority="10" PeriodSeconds="0.200" TimeCapacitySeconds="0.050" Deadline="HARD"/>
-</Process>
-<Process Name="PARTITION2_PROCESS2" StackSize="256">
-<Proc_Ext:Extension BasePriority="20" PeriodSeconds="0.200" TimeCapacitySeconds="0.025" Deadline="HARD"/>
-</Process>
 <PartitionExt:Extension StackSize="256" ErrorHandler="PARTITION2_ERRORHANDLER" ErrorHandlerStackSize="256"/>
 </Partition>
 <Partition EntryPoint="PARTITION3_DEFAULTPROCESS" PartitionIdentifier="3" PartitionName="PARTITION3">
-<Process Name="PARTITION3_PROCESS1" StackSize="256">
-<Proc_Ext:Extension BasePriority="10" PeriodSeconds="0.200" TimeCapacitySeconds="0.050" Deadline="HARD"/>
-</Process>
 <PartitionExt:Extension StackSize="256" ErrorHandler="PARTITION3_ERRORHANDLER" ErrorHandlerStackSize="256"/>
 </Partition>
 <!-- SNIPPET_END -->
@@ -275,17 +266,17 @@
 </Partition_Memory>
 <!-- SNIPPET_END -->
 <!-- SNIPPET_START MODULE_SCHEDULE -->
-<Module_Schedule MajorFrameSeconds="0.250">
-<Partition_Schedule PartitionIdentifier="1" PartitionName="PARTITION1" PeriodDurationSeconds="0.050" PeriodSeconds="0.100">
-<Window_Schedule PartitionPeriodStart="true" WindowDurationSeconds="0.050" WindowIdentifier="101" WindowStartSeconds="0.000"/>
-<Window_Schedule PartitionPeriodStart="true" WindowDurationSeconds="0.050" WindowIdentifier="102" WindowStartSeconds="0.100"/>
+<Module_Schedule MajorFrameSeconds="0.100">
+<Partition_Schedule PartitionIdentifier="1" PartitionName="PARTITION1" PeriodDurationSeconds="0.025" PeriodSeconds="0.050">
+<Window_Schedule PartitionPeriodStart="true" WindowDurationSeconds="0.025" WindowIdentifier="101" WindowStartSeconds="0.000"/>
+<Window_Schedule PartitionPeriodStart="true" WindowDurationSeconds="0.025" WindowIdentifier="102" WindowStartSeconds="0.050"/>
 </Partition_Schedule>
-<Partition_Schedule PartitionIdentifier="2" PartitionName="PARTITION2" PeriodDurationSeconds="0.050" PeriodSeconds="0.100">
-<Window_Schedule PartitionPeriodStart="true" WindowDurationSeconds="0.050" WindowIdentifier="201" WindowStartSeconds="0.050"/>
-<Window_Schedule PartitionPeriodStart="true" WindowDurationSeconds="0.050" WindowIdentifier="202" WindowStartSeconds="0.150"/>
+<Partition_Schedule PartitionIdentifier="2" PartitionName="PARTITION2" PeriodDurationSeconds="0.010" PeriodSeconds="0.050">
+<Window_Schedule PartitionPeriodStart="true" WindowDurationSeconds="0.010" WindowIdentifier="201" WindowStartSeconds="0.025"/>
+<Window_Schedule PartitionPeriodStart="true" WindowDurationSeconds="0.010" WindowIdentifier="202" WindowStartSeconds="0.075"/>
 </Partition_Schedule>
-<Partition_Schedule PartitionIdentifier="3" PartitionName="PARTITION3" PeriodDurationSeconds="0.025" PeriodSeconds="0.250">
-<Window_Schedule PartitionPeriodStart="true" WindowDurationSeconds="0.025" WindowIdentifier="301" WindowStartSeconds="0.200"/>
+<Partition_Schedule PartitionIdentifier="3" PartitionName="PARTITION3" PeriodDurationSeconds="0.010" PeriodSeconds="0.100">
+<Window_Schedule PartitionPeriodStart="true" WindowDurationSeconds="0.010" WindowIdentifier="301" WindowStartSeconds="0.035"/>
 </Partition_Schedule>
 </Module_Schedule>
 <!-- SNIPPET_END -->
@@ -439,18 +430,20 @@
 <!-- SNIPPET_END -->
 <!-- SNIPPET_START MODEXT -->
 <ModExt:Extension DefaultStackSize="256"/>
-<ModExt:Extension_AM335X
-	RAMMemoryPhysicalAddress="0x80000000"
-	RAMMemorySizeBytes="0x10000000"
+<ModExt:Extension_System_ARMV7A
+	SystemRAMMemoryPhysicalAddress="0x80000000"
+	SystemRAMMemorySizeBytes="0x10000000"
 	SystemBootRegionSizeBytes="0x00001000"
-	SystemStackRegionSizeBytes="0x00004000"
 	SystemCodeRegionSizeBytes="0x00020000"
-	SystemDataRegionSizeBytes="0x00020000"
-	SystemHeapRegionSizeBytes="0x00100000"
-	SystemFLTranslationTableRegionSizeBytes="0x00100000"
-	SystemSLTranslationTableRegionSizeBytes="0x00100000"
+	SystemDataRegionSizeBytes="0x00004000"/>
+<ModExt:Extension_Module_ARMV7A
+	ModuleStackRegionSizeBytes="0x00004000"
 	ModuleCodeRegionSizeBytes="0x00001000"
 	ModuleDataRegionSizeBytes="0x00001000"
+	ModuleHeapRegionSizeBytes="0x00100000"
+	ModuleFLTranslationTableRegionSizeBytes="0x00100000"
+	ModuleSLTranslationTableRegionSizeBytes="0x00100000"/>
+<ModExt:Extension_Module_ARMV7A_AM335X
 	ModuleNetworkPhysicalAddress="0x00000001010101011010"/>
 <!-- SNIPPET_END -->
 </ARINC_653_Module>
