@@ -1,2 +1,2 @@
-set PATH_CCS=C:\ti\ccs910\ccs
+set PATH_CCS=C:\ti\ccs1040\ccs
 set PATH_PROJECT=D:\CCSWorkspace\ARINC653_AM335X
