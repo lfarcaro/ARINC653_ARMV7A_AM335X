@@ -3,14 +3,19 @@
 	.cdecls C,LIST,"hw_intc.h"
 
 	; References global symbols
+	.ref ENTRYPOINT_CORE0
 
 	; Variables and functions addresses
-	.ref CURRENT_CONTEXT
+	.ref CORE_CURRENT_CONTEXT
 	.ref SCHEDULER
 	.ref TICK
 	.ref PORT_ABORTERRORHANDLER
 	.ref PORT_UNDEFINEDINSTRUCTIONERRORHANDLER
 	.ref IRQHandlerVectorTable
+
+	; Measurement variables and functions
+	.ref MEASURE_PAUSE
+	.ref MEASURE_RESUME
 
 ; Mode constants
 MODE_MASK .set 0x1F
@@ -31,6 +36,17 @@ SERVICE_SWITCH .set 4
 SERVICE_DISABLEINTERRUPTS .set 5
 SERVICE_ENABLEINTERRUPTS .set 6
 
+; System running method
+	.align 4
+	.def PORT_RUNSYSTEM
+PORT_RUNSYSTEM: .asmfunc
+
+	; Proceeds to Core #0 entry point
+	LDR R0, _ENTRYPOINT_CORE0
+	LDR R0, [R0]
+	BX R0
+	.endasmfunc
+
 ; Save general context macro - Should be used in SYS mode
 macroPORT_SAVEGENERALCONTEXT .macro AUXILIARY_MODE
 	; Pushes R0 into auxiliary mode stack
@@ -38,14 +54,14 @@ macroPORT_SAVEGENERALCONTEXT .macro AUXILIARY_MODE
 	STMFD SP!, {R0}
 	CPS #MODE_SYS
 
-	; Gets CURRENT_CONTEXT pointer
-	LDR R0, _CURRENT_CONTEXT
+	; Gets CORE_CURRENT_CONTEXT pointer
+	LDR R0, _CORE_CURRENT_CONTEXT
 	LDR R0, [R0]
-	; Gets CURRENT_CONTEXT.PORT_CONTEXT element pointer
+	; Gets CORE_CURRENT_CONTEXT.PORT_CONTEXT element pointer
 	LDR R0, [R0, #12]
 
 	; Points context end
-	ADD R0, R0, #204
+	ADD R0, R0, #((2+(32*2)+2+15)*4)
 
 	; Saves general purpose registers
 	; Saves R1 to R14
@@ -62,26 +78,27 @@ macroPORT_SAVEGENERALCONTEXT .macro AUXILIARY_MODE
 	VMRS R1, FPSCR
 	VMRS R2, FPEXC
 	STMFD R0!, {R1, R2}
-	; Saves D0 to D15
+	; Saves D0 to D31
+	VSTMDB R0!, {D16-D31}
 	VSTMDB R0!, {D0-D15}
 	.endm
 ; Save specific context macro
 ; R2 = LR
 ; R3 = CPSR
 macroPORT_SAVESPECIFICCONTEXT .macro
-	; Gets CURRENT_CONTEXT pointer
-	LDR R0, _CURRENT_CONTEXT
+	; Gets CORE_CURRENT_CONTEXT pointer
+	LDR R0, _CORE_CURRENT_CONTEXT
 	LDR R0, [R0]
-	; Gets CURRENT_CONTEXT.PORT_CONTEXT element pointer
+	; Gets CORE_CURRENT_CONTEXT.PORT_CONTEXT element pointer
 	LDR R0, [R0, #12]
 
 	; Points other information start
-	ADD R1, R0, #204
+	ADD R1, R0, #((2+(32*2)+2+15)*4)
 
 	; Nothing to save
 
 	; Points CPSR and LR end
-	ADD R1, R0, #8
+	ADD R1, R0, #((2)*4)
 
 	; Saves CPSR and LR
 	STMFD R1!, {R2, R3}
@@ -90,21 +107,22 @@ macroPORT_SAVESPECIFICCONTEXT .macro
 ; R2 = LR
 ; R3 = CPSR
 macroPORT_RESTORESPECIFICCONTEXT .macro
-	; Gets CURRENT_CONTEXT pointer
-	LDR R0, _CURRENT_CONTEXT
+	; Gets CORE_CURRENT_CONTEXT pointer
+	LDR R0, _CORE_CURRENT_CONTEXT
 	LDR R0, [R0]
-	; Gets CURRENT_CONTEXT.PORT_CONTEXT element pointer
+	; Gets CORE_CURRENT_CONTEXT.PORT_CONTEXT element pointer
 	LDR R0, [R0, #12]
 
 	; Points other information start
-	ADD R1, R0, #204
+	ADD R1, R0, #((2+(32*2)+2+15)*4)
 
-	; Restores CURRENT_CONTEXT.PORT_CONTEXT.CONTEXT_IDENTIFIER element
-	LDR R2, [R1, #0]
+	; Restores CORE_CURRENT_CONTEXT.PORT_CONTEXT.CONTEXT_IDENTIFIER element
+	LDR R2, [R1, #(0*4)]
 	MCR p15, #0, R2, c13, c0, #1 ; Sets CONTEXTIDR
-	; Restores CURRENT_CONTEXT.PORT_CONTEXT.FLTRANSLATIONTABLE_ADDRESS element
-	LDR R2, [R1, #4]
+	; Restores CORE_CURRENT_CONTEXT.PORT_CONTEXT.FLTRANSLATIONTABLE_ADDRESS element
+	LDR R2, [R1, #(1*4)]
 	MCR p15, #0, R2, c2, c0, #1 ; Sets TTBR1
+	DMB
 
 	; Points context start
 	ADD R1, R0, #0
@@ -114,18 +132,19 @@ macroPORT_RESTORESPECIFICCONTEXT .macro
 	.endm
 ; Restore general context macro - Should be used in SYS mode
 macroPORT_RESTOREGENERALCONTEXT .macro AUXILIARY_MODE
-	; Gets CURRENT_CONTEXT pointer
-	LDR R0, _CURRENT_CONTEXT
+	; Gets CORE_CURRENT_CONTEXT pointer
+	LDR R0, _CORE_CURRENT_CONTEXT
 	LDR R0, [R0]
-	; Gets CURRENT_CONTEXT.PORT_CONTEXT element pointer
+	; Gets CORE_CURRENT_CONTEXT.PORT_CONTEXT element pointer
 	LDR R0, [R0, #12]
 
 	; Points context start
-	ADD R1, R0, #8
+	ADD R1, R0, #((2)*4)
 
 	; Restores NEON/VFP coprocessor registers
-	; Restores D0 to D15
+	; Restores D0 to D31
 	VLDMIA R1!, {D0-D15}
+	VLDMIA R1!, {D16-D31}
 	; Restores FPSCR and FPEXC
 	LDMFD R1!, {R2, R3}
 	VMSR FPSCR, R2
@@ -138,85 +157,6 @@ macroPORT_RESTOREGENERALCONTEXT .macro AUXILIARY_MODE
 
 	.text
 	.state32
-
-; IRQ handler method
-	.align 4
-	.def PORT_IRQHANDLER
-PORT_IRQHANDLER: .asmfunc
-	; Corrects LR
-	SUB LR, LR, #4
-
-	; Saves critical context
-	STMFD SP!, {R0-R12,LR}
-
-	; Loads IRQ handler vector table address
-	LDR R0, _IRQHandlerVectorTable
-	; Reads active IRQ
-	LDR R1, ADDR_SIR_IRQ
-	LDR R1, [R1]
-	AND R1, R1, #INTC_SIR_IRQ_ACTIVEIRQ
-	; Calculates ISR address
-	LDR R0, [R0, R1, lsl #2]
-	; Saves ISR address into stack (without moving SP)
-	STR R0, [SP, #-4]
-
-	; Restores critical context (without moving SP)
-	LDMFD SP, {R0-R12,LR}
-
-	; Loads default return address
-	LDR LR, _PORT_IRQHANDLER_EXITISR_RESTORECONTEXT
-
-	; Enters ISR using address in stack (without moving SP)
-	LDR PC, [SP, #-4]
-	.endasmfunc
-
-; IRQ handler exit ISR and restore context method
-	.align 4
-PORT_IRQHANDLER_EXITISR_RESTORECONTEXT: .asmfunc
-	; Enables new IRQ generation
-	LDR R0, ADDR_CONTROL
-	MOV R1, #INTC_CONTROL_NEWIRQAGR
-	STR R1, [R0]
-	DSB
-
-	; Restores critical context
-	LDMFD SP!, {R0-R12,LR}
-
-	; Returns
-	MOVS PC, LR
-	.endasmfunc
-
-; IRQ handler exit ISR and keep context method
-	.align 4
-PORT_IRQHANDLER_EXITISR_KEEPCONTEXT: .asmfunc
-	; Saves temporary registers
-	STMFD SP!, {R0-R1}
-
-	; Enables new IRQ generation
-	LDR R0, ADDR_CONTROL
-	MOV R1, #INTC_CONTROL_NEWIRQAGR
-	STR R1, [R0]
-	DSB
-
-	; Restores temporary registers
-	LDMFD SP!, {R0-R1}
-
-	; Discards critical context
-	ADD SP, SP, #56
-
-	; Returns
-	MOVS PC, LR
-	.endasmfunc
-
-; FIQ handler method
-	.align 4
-	.def PORT_FIQHANDLER
-PORT_FIQHANDLER: .asmfunc
-	; Corrects LR
-	SUB LR, LR, #4
-	; Returns
-	MOVS PC, LR
-	.endasmfunc
 
 ; Abort handler method
 	.align 4
@@ -322,6 +262,106 @@ PORT_UNDEFINEDINSTRUCTIONHANDLER: .asmfunc
 	MOVS PC, LR
 	.endasmfunc
 
+; IRQ handler method
+	.align 4
+	.def PORT_IRQHANDLER
+PORT_IRQHANDLER: .asmfunc
+	; Corrects LR
+	SUB LR, LR, #4
+
+	; Saves critical context
+	STMFD SP!, {R0-R12,LR}
+
+	.if $$defined(MEASURE_SUPPRESSTICK)
+	; Pauses measurement
+	BL MEASURE_PAUSE
+	.endif
+
+	; Loads interrupt handler vector table address
+	LDR R0, _INTERRUPT_VECTORTABLE
+	; Reads interrupt number
+	LDR R1, ADDR_SIR_IRQ
+	LDR R1, [R1]
+	AND R1, R1, #INTC_SIR_IRQ_ACTIVEIRQ
+	; Calculates ISR address
+	LDR R0, [R0, R1, lsl #2]
+	; Saves ISR address into stack (without moving SP)
+	STR R0, [SP, #-4]
+
+	; Restores changed registers from critical context (without moving SP)
+	LDMFD SP, {R0-R12, LR}
+
+	; Loads default return address
+	LDR LR, _PORT_IRQHANDLER_EXITISR_RESTORECONTEXT
+
+	; Enters ISR using address in stack (without moving SP)
+	LDR PC, [SP, #-4]
+	.endasmfunc
+
+; IRQ handler exit ISR and restore context method
+	.align 4
+PORT_IRQHANDLER_EXITISR_RESTORECONTEXT: .asmfunc
+	; Saves temporary registers
+	STMFD SP!, {R0-R1}
+
+	; Enables new IRQ generation
+	LDR R0, ADDR_CONTROL
+	MOV R1, #INTC_CONTROL_NEWIRQAGR
+	STR R1, [R0]
+	DSB
+
+	; Restores temporary registers
+	LDMFD SP!, {R0-R1}
+
+	.if $$defined(MEASURE_SUPPRESSTICK)
+	; Resumes measurement
+	BL MEASURE_RESUME
+	.endif
+
+	; Restores critical context
+	LDMFD SP!, {R0-R12,LR}
+
+	; Returns
+	MOVS PC, LR
+	.endasmfunc
+
+; IRQ handler exit ISR and keep context method
+	.align 4
+PORT_IRQHANDLER_EXITISR_KEEPCONTEXT: .asmfunc
+	; Saves temporary registers
+	STMFD SP!, {R0-R12,LR}
+
+	; Enables new IRQ generation
+	LDR R0, ADDR_CONTROL
+	MOV R1, #INTC_CONTROL_NEWIRQAGR
+	STR R1, [R0]
+	DSB
+
+	.if $$defined(MEASURE_SUPPRESSTICK)
+	; Resumes measurement
+	BL MEASURE_RESUME
+	.endif
+
+	; Restores temporary registers
+	LDMFD SP!, {R0-R12,LR}
+
+	; Discards critical context
+	ADD SP, SP, #(14 * 4)
+
+	; Returns
+	MOVS PC, LR
+	.endasmfunc
+
+; FIQ handler method
+	.align 4
+	.def PORT_FIQHANDLER
+PORT_FIQHANDLER: .asmfunc
+	; Corrects LR
+	SUB LR, LR, #4
+	; Returns
+	MOVS PC, LR
+	.endasmfunc
+
 ; SVC handler method
 	.align 4
 	.def PORT_SVCHANDLER
@@ -341,43 +381,43 @@ PORT_SVCHANDLER: .asmfunc
 	CMP R0, #SERVICE_TICK
 	LDREQ R0, _PORT_SVCHANDLER_TICK
 	STREQ R0, [SP, #4]
-	LDMFDEQ SP!, {R0, PC}
+	LDMEQFD SP!, {R0, PC}
 
 	; Handles enter core service
 	CMP R0, #SERVICE_ENTERCORE
 	LDREQ R0, _PORT_SVCHANDLER_ENTERCORE
 	STREQ R0, [SP, #4]
-	LDMFDEQ SP!, {R0, PC}
+	LDMEQFD SP!, {R0, PC}
 
 	; Handles exit core service
 	CMP R0, #SERVICE_EXITCORE
 	LDREQ R0, _PORT_SVCHANDLER_EXITCORE
 	STREQ R0, [SP, #4]
-	LDMFDEQ SP!, {R0, PC}
+	LDMEQFD SP!, {R0, PC}
 
 	; Handles yield service
 	CMP R0, #SERVICE_YIELD
 	LDREQ R0, _PORT_SVCHANDLER_YIELD
 	STREQ R0, [SP, #4]
-	LDMFDEQ SP!, {R0, PC}
+	LDMEQFD SP!, {R0, PC}
 
 	; Handles switch service
 	CMP R0, #SERVICE_SWITCH
 	LDREQ R0, _PORT_SVCHANDLER_SWITCH
 	STREQ R0, [SP, #4]
-	LDMFDEQ SP!, {R0, PC}
+	LDMEQFD SP!, {R0, PC}
 
 	; Handles disable interrupts service
 	CMP R0, #SERVICE_DISABLEINTERRUPTS
 	LDREQ R0, _PORT_SVCHANDLER_DISABLEINTERRUPTS
 	STREQ R0, [SP, #4]
-	LDMFDEQ SP!, {R0, PC}
+	LDMEQFD SP!, {R0, PC}
 
 	; Handles enable interrupts service
 	CMP R0, #SERVICE_ENABLEINTERRUPTS
 	LDREQ R0, _PORT_SVCHANDLER_ENABLEINTERRUPTS
 	STREQ R0, [SP, #4]
-	LDMFDEQ SP!, {R0, PC}
+	LDMEQFD SP!, {R0, PC}
 
 	; Invalid service called
 PORT_SVCHANDLER_INFINITELOOP:
@@ -456,14 +496,16 @@ PORT_SVCHANDLER_EXITCORE: .asmfunc
 	; Should enable interrupts and, if in privileged mode and
 	; not in system partition context, exit privileged mode
 
-	; Gets CURRENT_CONTEXT pointer
-	LDR R2, _CURRENT_CONTEXT
+	; Gets CORE_CURRENT_CONTEXT pointer
+	LDR R2, _CORE_CURRENT_CONTEXT
 	LDR R2, [R2]
-	; Gets CURRENT_CONTEXT.SYSTEM_PARTITION_CONTEXT element
+	; Gets CORE_CURRENT_CONTEXT.SYSTEM_PARTITION_CONTEXT element
 	LDRB R2, [R2, #20]
+
+	; Verifies if this is a system partition context
 	CMP R2, #0
-	MOVEQ R2, #MODE_USR ; If it's not a system partition context, enter USR mode
-	MOVNE R2, #MODE_SYS ; If it's a system partition context, stay in SYS mode
+	MOVEQ R2, #MODE_USR ; If not, enter USR mode
+	MOVNE R2, #MODE_SYS ; If so, stay in SYS mode
 
 	; If in SYS mode, enables interrupts and enters USR or SYS mode
 	MRS R0, SPSR
@@ -581,6 +623,7 @@ PORT_GETCALLADDRESS: .asmfunc
 	LDMFD SP!, {R0}
 	; Corrects call address
 	SUB R0, R0, #4
+
 	; Returns
 	MOV PC, LR
 	.endasmfunc
@@ -699,6 +742,8 @@ PORT_EXITPRIVILEGEDMODE: .asmfunc
 	.endasmfunc
 
 ; Infinite loop
+	.align 4
+	.def PORT_INFINITELOOP
 PORT_INFINITELOOP: .asmfunc
 	; Loops forever
 	B PORT_INFINITELOOP
@@ -714,11 +759,12 @@ _PORT_SVCHANDLER_DISABLEINTERRUPTS .word PORT_SVCHANDLER_DISABLEINTERRUPTS
 _PORT_SVCHANDLER_ENABLEINTERRUPTS .word PORT_SVCHANDLER_ENABLEINTERRUPTS
 
 ; Variables and functions addresses
-_CURRENT_CONTEXT .word CURRENT_CONTEXT
+_CORE_CURRENT_CONTEXT .word CORE_CURRENT_CONTEXT
 _PORT_IRQHANDLER_EXITISR_RESTORECONTEXT .word PORT_IRQHANDLER_EXITISR_RESTORECONTEXT
 _PORT_IRQHANDLER_EXITISR_KEEPCONTEXT .word PORT_IRQHANDLER_EXITISR_KEEPCONTEXT
 _PORT_UNDEFINEDINSTRUCTIONERRORHANDLER .word PORT_UNDEFINEDINSTRUCTIONERRORHANDLER
-_IRQHandlerVectorTable .word IRQHandlerVectorTable
+_INTERRUPT_VECTORTABLE .word IRQHandlerVectorTable
+_ENTRYPOINT_CORE0 .word ENTRYPOINT_CORE0
 
 ; Interrupt controller register constants
 ADDR_CONTROL .word SOC_AINTC_REGS + INTC_CONTROL

@@ -2,24 +2,40 @@
 #define ARINC653_PORT_H_
 
 // Hardware includes
-#include "hw_control_AM335x.h"
-#include "soc_AM335x.h"
+#include "cpu.h"
 #include "cp15.h"
 #include "cache.h"
-#include "consoleUtils.h"
 #include "beaglebone.h"
+#include "console.h"
 #include "interrupt.h"
+#include "mmu.h"
+#include "timer_tick.h"
+#include "timer_delay.h"
 #include "gpio_v2.h"
 #include "dmtimer.h"
-#include "BeagleboneGELFile.h"
-#include "mmu.h"
 #include "ethernet.h"
 #include "protocol.h"
-#include "uartStdio.h"
+
+// Instrumentation includes
+#include "measure.h"
+#include "track.h"
 
 // Optional hardware includes
 #include "tsc_adc.h"
 #include "ehrpwm.h"
+#include "pwmss.h"
+#include "pwmss.h"
+#include "usblib.h"
+#include "usbhid.h"
+#include "usbdhid.h"
+#include "usbdhidjoystick.h"
+#include "usb.h"
+#include "usb-ids.h"
+#include "usbdevice.h"
+#include "hw_usb.h"
+
+// Core count
+#define PORT_CORECOUNT CPU_CORECOUNT
 
 // Generate console output for errors flag
 #define PORT_GENERATECONSOLEOUTPUT_ERRORS true
@@ -34,7 +50,7 @@
 #define PORT_HEAP_ALIGNMENT 4
 
 // Vector table address
-#define PORT_VECTORTABLE_ADDRESS 0x40300000
+#define PORT_VECTORTABLE_ADDRESS_CORE0 0x40300000
 
 // Vector table size
 #define PORT_VECTORTABLE_SIZE 16
@@ -89,6 +105,15 @@
 #define ERRORIDENTIFIER_CACHEFAULT 103
 #define ERRORIDENTIFIER_UNDEFINEDINSTRUCTION 104
 
+// Core getter - Constant
+#define PORT_GETCORE() 0
+
+// Cores' entry points
+extern void (*ENTRYPOINT_CORE0)(void);
+
+// Cores' module configurations
+extern MODULE_CONFIGURATION_TYPE *MODULE_CONFIGURATION_CORE0;
+
 // Prepare call address - Should store the address from which the current function was called to be retrieved by PORT_GETCALLADDRESS
 #define PORT_PREPARECALLADDRESS(); {\
 	/*Stores LR in stack*/\
@@ -98,11 +123,11 @@
 // Get call address - Should return the address from which the current function was called, previously stored into stack
 portADDRESS PORT_GETCALLADDRESS(void);
 
-// Hook - Before STARTUP_SYSTEM
-portBOOLEAN PORT_HOOK_BEFORE_STARTUP_SYSTEM(void);
+// Hook - STARTUP_SYSTEM
+portBOOLEAN PORT_HOOK_STARTUP_SYSTEM(void);
 
-// Hook - After STARTUP_SYSTEM
-portBOOLEAN PORT_HOOK_AFTER_STARTUP_SYSTEM(void);
+// Hook - RUN_SYSTEM
+portBOOLEAN PORT_HOOK_RUN_SYSTEM(void);
 
 // Hook - Before STARTUP_MODULE
 portBOOLEAN PORT_HOOK_BEFORE_STARTUP_MODULE(void);
@@ -131,6 +156,9 @@ portBOOLEAN PORT_HOOK_AFTER_CREATE_ERROR_HANDLER(portADDRESS PARTITION_INFORMATI
 // Initialize tick method
 void PORT_INITIALIZETICK(void);
 
+// Context identifier range getter - Determines the range of context identifiers that can be used by the current module
+void PORT_GETCONTEXTIDENTIFIERRANGE(IDENTIFIER_TYPE *FIRST_CONTEXT_IDENTIFIER, IDENTIFIER_TYPE *LAST_CONTEXT_IDENTIFIER);
+
 // Initialize context method - Initializes context in its creation time
 void PORT_INITIALIZECONTEXT(CONTEXT_TYPE *CONTEXT);
 
@@ -140,17 +168,20 @@ void PORT_PREPARECONTEXT(CONTEXT_TYPE *CONTEXT);
 // Reset handler method - Defined in ASM module
 extern void PORT_RESETHANDLER(void);
 
-// IRQ handler method - Defined in ASM module
-extern void PORT_IRQHANDLER(void);
-
-// FIQ handler method - Defined in ASM module
-extern void PORT_FIQHANDLER(void);
+// System running method - Defined in ASM module
+extern void PORT_RUNSYSTEM(void);
 
 // Abort handler method - Defined in ASM module
 extern void PORT_ABORTHANDLER(void);
 
 // Undefined instruction handler method - Defined in ASM module
 extern void PORT_UNDEFINEDINSTRUCTIONHANDLER(void);
+
+// IRQ handler method - Defined in ASM module
+extern void PORT_IRQHANDLER(void);
+
+// FIQ handler method - Defined in ASM module
+extern void PORT_FIQHANDLER(void);
 
 // SVC handler method - Defined in ASM module
 extern void PORT_SVCHANDLER(void);
@@ -189,10 +220,10 @@ void PORT_TERMINATETICK(void);
 void PORT_RESTARTMODULE(void);
 
 // Abort error handler method
-void PORT_ABORTERRORHANDLER(unsigned int DFAR, unsigned int DFSR, unsigned int IFAR, unsigned int IFSR, unsigned int LR);
+void PORT_ABORTERRORHANDLER(portUINTBASE DFAR, portUINTBASE DFSR, portUINTBASE IFAR, portUINTBASE IFSR, portUINTBASE LR);
 
 // Undefined instruction error handler method
-void PORT_UNDEFINEDINSTRUCTIONERRORHANDLER(unsigned int LR);
+void PORT_UNDEFINEDINSTRUCTIONERRORHANDLER(portUINTBASE LR);
 
 // Report system error method
 void PORT_REPORTSYSTEMERROR(SYSTEM_STATE_TYPE SYSTEM_STATE, ERROR_IDENTIFIER_TYPE ERROR_IDENTIFIER, ERROR_CODE_TYPE ERROR_CODE, MESSAGE_ADDR_TYPE MESSAGE_ADDR, ERROR_MESSAGE_SIZE_TYPE LENGTH);
